@@ -30,7 +30,7 @@ jobs:
             echo "=== Build Next.js ==="
             npm run build
             echo "=== Restart PM2 ==="
-            pm2 restart dashboard-beta --update-env
+            pm2 restart WSP_dashboard-beta --update-env
             echo "=== Save PM2 state ==="
             pm2 save
             echo "=== Deploy beta selesai ==="

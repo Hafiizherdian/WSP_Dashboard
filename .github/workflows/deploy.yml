@@ -24,7 +24,7 @@ jobs:
             set -e
 
             echo "=== Masuk ke direktori app ==="
-            cd ~/app
+            cd ~/WSP_Dashboard
 
             echo "=== Pull kode terbaru ==="
             git pull origin master

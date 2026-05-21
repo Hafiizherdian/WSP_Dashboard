@@ -3,68 +3,79 @@ import { pool } from '@/lib/db';
 export async function GET() {
   try {
     const client = await pool.connect();
-    
-    // Query untuk melihat semua products dan total units_dos mereka (file 25)
-    const allProductsDos = await client.query(`
+
+    // Semua product per category, grouped per file
+    const categoryProducts = await client.query(`
       SELECT 
+        file_id,
+        category,
         product,
-        SUM(units_dos) as total_dos,
-        COUNT(*) as record_count,
-        MIN(units_dos) as min_dos,
-        MAX(units_dos) as max_dos,
-        AVG(units_dos) as avg_dos
-      FROM sales_records 
-      WHERE file_id = 25
-        AND units_dos > 0
+        COUNT(*)           AS record_count,
+        SUM(units_dos)     AS total_dos,
+        SUM(omzet)         AS total_omzet
+      FROM sales_records
+      GROUP BY file_id, category, product
+      ORDER BY file_id, category, product
+    `);
+
+    // Summary: berapa product unik per category per file
+    const categorySummary = await client.query(`
+      SELECT
+        file_id,
+        category,
+        COUNT(DISTINCT product) AS product_count,
+        SUM(units_dos)          AS total_dos,
+        SUM(omzet)              AS total_omzet
+      FROM sales_records
+      GROUP BY file_id, category
+      ORDER BY file_id, category
+    `);
+
+    // Product yang kategorinya TIDAK KONSISTEN antar file (nama sama, category beda)
+    const inconsistentCategory = await client.query(`
+      SELECT
+        product,
+        COUNT(DISTINCT category) AS category_count,
+        ARRAY_AGG(DISTINCT category ORDER BY category) AS categories
+      FROM sales_records
       GROUP BY product
-      ORDER BY total_dos DESC
-      LIMIT 20
+      HAVING COUNT(DISTINCT category) > 1
+      ORDER BY product
     `);
-    
-    // Query untuk melihat ON BOLD 20 F detail per file
-    const boldPerFile = await client.query(`
-      SELECT 
-        file_id,
-        SUM(units_dos) as total_dos,
-        COUNT(*) as record_count,
-        COUNT(CASE WHEN units_dos > 0 THEN 1 END) as records_with_dos,
-        COUNT(CASE WHEN units_dos = 0 THEN 1 END) as records_with_zero_dos
-      FROM sales_records 
-      WHERE product = 'ON BOLD 20 F'
-      GROUP BY file_id
-      ORDER BY file_id
-    `);
-    
-    // Query untuk melihat total semua products per file
-    const totalPerFile = await client.query(`
-      SELECT 
-        file_id,
-        SUM(units_dos) as total_dos,
-        COUNT(*) as record_count
-      FROM sales_records 
-      WHERE file_id IN (25, 26)
-      GROUP BY file_id
-      ORDER BY file_id
-    `);
-    
+
     client.release();
-    
+
+    // Reshape: { file_id -> { category -> product[] } }
+    const grouped: Record<string, Record<string, { product: string; record_count: number; total_dos: number; total_omzet: number }[]>> = {};
+
+    for (const row of categoryProducts.rows) {
+      const fid = String(row.file_id);
+      const cat = row.category ?? '(null)';
+      if (!grouped[fid]) grouped[fid] = {};
+      if (!grouped[fid][cat]) grouped[fid][cat] = [];
+      grouped[fid][cat].push({
+        product:      row.product,
+        record_count: Number(row.record_count),
+        total_dos:    Number(row.total_dos),
+        total_omzet:  Number(row.total_omzet),
+      });
+    }
+
     return Response.json({
       success: true,
-      allProductsDos: allProductsDos.rows,
-      boldPerFile: boldPerFile.rows,
-      totalPerFile: totalPerFile.rows,
-      expected: {
-        file25: "10390.558",
-        file26: "12161.279"
-      }
+      // Struktur tree: file_id → category → products[]
+      grouped,
+      // Flat summary per file+category
+      categorySummary: categorySummary.rows,
+      // Product dengan category tidak konsisten lintas file
+      inconsistentCategory: inconsistentCategory.rows,
     });
-    
+
   } catch (error) {
-    console.error('Database query error:', error);
+    console.error('Debug category error:', error);
     return Response.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 });
   }
 }

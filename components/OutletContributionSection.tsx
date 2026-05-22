@@ -846,7 +846,7 @@ function YearPanel({ year, isA, data: rows, theme, onExpand, compact, otherTotal
         <MetricCard label="Total DOZ Net" value={totalDoz.toLocaleString('id-ID')} sub={`${metrics.weeks} minggu (W${weekRange.min}–W${weekRange.max})`}
           cardKey={isA ? 'card1' : 'card2'} icon={Store} theme={theme} compact={isMobile || compact}
           trend={metrics.yoyTrend !== undefined ? { value: metrics.yoyTrend, label: 'YoY' } : undefined} />
-        <MetricCard label="Rata-rata/Minggu" value={Math.round(metrics.avg).toLocaleString('id-ID')} sub={`DOZ ÷ ${metrics.weeks} minggu`}
+        <MetricCard label="Rata-rata/Minggu" value={metrics.avg.toLocaleString('id-ID')} sub={`DOZ ÷ ${metrics.weeks} minggu`}
           cardKey={isA ? 'card1' : 'card2'} icon={TrendingUp} theme={theme} compact={isMobile || compact} />
         <MetricCard label="Minggu Terbaik" value={metrics.best.week} sub={`${metrics.best.dozNet.toLocaleString('id-ID')} DOZ`}
           cardKey="card3" icon={ArrowUp} theme={theme} compact={isMobile || compact} />

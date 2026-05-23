@@ -5,7 +5,8 @@ import {
   Users, Plus, Trash2, Edit2, X, CheckCircle,
   AlertCircle, Shield, ShieldCheck, ShieldAlert,
   ToggleLeft, ToggleRight, KeyRound, Eye, EyeOff,
-  Copy, RefreshCw, Mail, Lock, UserCog,
+  Copy, RefreshCw, Mail, Lock, UserCog, History,
+  Monitor, Smartphone,
 } from 'lucide-react';
 import { UserRole, ROLE_LABELS, SessionUser } from '@/lib/auth/types';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -28,6 +29,13 @@ interface AppUser {
   last_login:      string | null;
   created_by_name: string | null;
   allowed_areas?:  string[];
+}
+interface LoginEvent {
+  id:         string;
+  created_at: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  success:    boolean;
 }
 interface ToastItem { id: number; type: 'success' | 'error' | 'warning'; msg: string; }
 type Theme = 'dark' | 'light';
@@ -352,6 +360,205 @@ function ResetPasswordModal({ user, theme, onClose, onReset }: {
   );
 }
 
+// ─── Login History Modal ─────────────────────────────────────────────────────────
+function LoginHistoryModal({ user, theme, onClose }: {
+  user: AppUser; theme: Theme; onClose: () => void;
+}) {
+  const t = tk(theme);
+  const d = theme === 'dark';
+  const [logs,    setLogs]    = useState<LoginEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`/api/users/login-history?userId=${user.id}`);
+        const j = await r.json();
+        if (r.ok && j.success) setLogs(j.data);
+        else setError(j.error || 'Gagal memuat riwayat login');
+      } catch {
+        setError('Terjadi kesalahan jaringan');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user.id]);
+
+  function parseDevice(ua: string | null): { label: string; mobile: boolean } {
+    if (!ua) return { label: '—', mobile: false };
+    const mobile = /mobile|android|iphone|ipad/i.test(ua);
+    const browser =
+      ua.includes('Edg')     ? 'Edge'    :
+      ua.includes('Chrome')  ? 'Chrome'  :
+      ua.includes('Firefox') ? 'Firefox' :
+      ua.includes('Safari')  ? 'Safari'  : 'Browser';
+    const os =
+      ua.includes('Windows') ? 'Windows' :
+      ua.includes('Mac')     ? 'macOS'   :
+      ua.includes('Linux')   ? 'Linux'   :
+      ua.includes('Android') ? 'Android' :
+      ua.includes('iPhone')  ? 'iOS'     :
+      ua.includes('iPad')    ? 'iPadOS'  : '';
+    return { label: os ? `${browser} · ${os}` : browser, mobile };
+  }
+
+  const successCount = logs.filter(l => l.success).length;
+  const failCount    = logs.filter(l => !l.success).length;
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1001, background: d ? 'rgba(0,0,0,0.75)' : 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(3px)', animation: 'fadeIn 0.15s ease' }}
+    >
+      <div style={{ background: t.modal, border: `1px solid ${t.lineStrong}`, borderRadius: 12, width: '100%', maxWidth: 620, maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', overflow: 'hidden', animation: 'slideUp 0.18s ease' }}>
+
+        {/* accent bar */}
+        <div style={{ height: 3, background: 'linear-gradient(90deg,#0ea5e9,#6366f1)', flexShrink: 0 }}/>
+
+        {/* header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px 14px', borderBottom: `1px solid ${t.line}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: t.blueBg, border: `1px solid ${t.blueBd}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <History size={15} color={t.blue}/>
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.tx1 }}>Riwayat Login</div>
+              <div style={{ fontSize: 11, color: t.tx3, marginTop: 2, fontFamily: F_MONO }}>@{user.username}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.tx3, display: 'flex' }}>
+            <X size={16}/>
+          </button>
+        </div>
+
+        {/* stats bar — hanya tampil jika data tersedia */}
+        {!loading && !error && logs.length > 0 && (
+          <div style={{ display: 'flex', gap: 10, padding: '10px 18px', borderBottom: `1px solid ${t.line}`, flexShrink: 0, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6, background: t.cardAlt, border: `1px solid ${t.line}`, fontSize: 11, fontFamily: F_MONO, color: t.tx2 }}>
+              <History size={10} color={t.tx3}/>
+              <span><strong style={{ color: t.tx1 }}>{logs.length}</strong> entri total</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6, background: t.greenBg, border: `1px solid ${t.greenBd}`, fontSize: 11, fontFamily: F_MONO, color: t.green }}>
+              <CheckCircle size={10}/>
+              <span><strong>{successCount}</strong> berhasil</span>
+            </div>
+            {failCount > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6, background: t.redBg, border: `1px solid ${t.redBd}`, fontSize: 11, fontFamily: F_MONO, color: t.red }}>
+                <AlertCircle size={10}/>
+                <span><strong>{failCount}</strong> gagal</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* body */}
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 48, color: t.tx3, fontSize: 12 }}>
+              <Spin sz={14}/> Memuat riwayat…
+            </div>
+          ) : error ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 16, padding: '10px 14px', borderRadius: 8, background: t.redBg, border: `1px solid ${t.redBd}`, fontSize: 12, color: t.red }}>
+              <AlertCircle size={13} style={{ flexShrink: 0 }}/> {error}
+            </div>
+          ) : logs.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: 48, color: t.tx3, fontSize: 12 }}>
+              <History size={24} color={t.tx4}/>
+              <span>Belum ada riwayat login untuk user ini</span>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5, fontFamily: F_SANS }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+                <tr style={{ background: t.thead }}>
+                  {['#', 'Waktu', 'IP Address', 'Browser / Perangkat', 'Status'].map((h, i) => (
+                    <th key={h} style={{
+                      padding: '8px 14px',
+                      textAlign: i === 0 ? 'center' : i === 4 ? 'center' : 'left',
+                      fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase',
+                      letterSpacing: '0.07em', color: t.theadTx,
+                      borderBottom: `1px solid rgba(255,255,255,0.06)`,
+                      fontFamily: F_MONO, whiteSpace: 'nowrap',
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log, idx) => {
+                  const dev    = parseDevice(log.user_agent);
+                  const rowBg  = idx % 2 === 1 ? t.rowAlt : 'transparent';
+                  return (
+                    <tr key={log.id} className="um-row" style={{ borderBottom: `1px solid ${t.line}`, transition: 'background 0.08s' }}>
+                      {/* nomor urut */}
+                      <td style={{ padding: '9px 14px', background: rowBg, textAlign: 'center' }}>
+                        <span style={{ fontSize: 10, color: t.tx4, fontFamily: F_MONO }}>{idx + 1}</span>
+                      </td>
+                      {/* waktu */}
+                      <td style={{ padding: '9px 14px', background: rowBg, whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 11.5, color: t.tx1, fontFamily: F_MONO }}>
+                          {new Date(log.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </div>
+                        <div style={{ fontSize: 10, color: t.tx4, fontFamily: F_MONO, marginTop: 1 }}>
+                          {new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </div>
+                      </td>
+                      {/* IP */}
+                      <td style={{ padding: '9px 14px', background: rowBg, fontFamily: F_MONO, fontSize: 11.5, color: t.tx2, whiteSpace: 'nowrap' }}>
+                        {log.ip_address
+                          ? log.ip_address
+                          : <span style={{ color: t.tx4 }}>—</span>
+                        }
+                      </td>
+                      {/* device */}
+                      <td style={{ padding: '9px 14px', background: rowBg }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: t.tx2 }}>
+                          {dev.mobile
+                            ? <Smartphone size={11} color={t.tx4} style={{ flexShrink: 0 }}/>
+                            : <Monitor    size={11} color={t.tx4} style={{ flexShrink: 0 }}/>
+                          }
+                          <span style={{ fontFamily: F_SANS }}>{dev.label}</span>
+                        </div>
+                      </td>
+                      {/* status */}
+                      <td style={{ padding: '9px 14px', background: rowBg, textAlign: 'center' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '2px 8px', borderRadius: 20, fontSize: 10.5, fontWeight: 700,
+                          fontFamily: F_MONO,
+                          background: log.success ? t.greenBg : t.redBg,
+                          color:      log.success ? t.green   : t.red,
+                          border: `1px solid ${log.success ? t.greenBd : t.redBd}`,
+                          whiteSpace: 'nowrap',
+                        }}>
+                          <span style={{ width: 5, height: 5, borderRadius: '50%', background: log.success ? t.green : t.red, display: 'inline-block', flexShrink: 0 }}/>
+                          {log.success ? 'Berhasil' : 'Gagal'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* footer */}
+        <div style={{ padding: '10px 18px', borderTop: `1px solid ${t.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 10.5, color: t.tx4, fontFamily: F_MONO, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <AlertCircle size={10}/>
+            Menampilkan hingga 100 entri terbaru
+          </span>
+          <button onClick={onClose} className="um-btn" style={{ padding: '6px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: t.input, color: t.tx2, border: `1px solid ${t.inputBd}`, cursor: 'pointer', fontFamily: F_SANS }}>
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── User Form Modal ─────────────────────────────────────────────────────────────
 interface UserFormProps {
   editing:  AppUser | null;
@@ -560,18 +767,19 @@ function DeleteModal({ userId, username, theme, onConfirm, onCancel }: {
 
 // ─── Main ────────────────────────────────────────────────────────────────────────
 export default function UserManagement({ theme }: { theme: Theme }) {
-  const { user: me }              = useAuth();
-  const t                         = tk(theme);
-  const d                         = theme === 'dark';
-  const [users,     setUsers]     = useState<AppUser[]>([]);
-  const [areas,     setAreas]     = useState<AreaConfig[]>(defaultAreas);
-  const [loading,   setLoading]   = useState(true);
-  const [showForm,  setShowForm]  = useState(false);
-  const [editing,   setEditing]   = useState<AppUser | null>(null);
-  const [deleteId,  setDeleteId]  = useState<string | null>(null);
-  const [resetUser, setResetUser] = useState<AppUser | null>(null);
-  const [toasts,    setToasts]    = useState<ToastItem[]>([]);
-  const counter                   = useRef(0);
+  const { user: me }                  = useAuth();
+  const t                             = tk(theme);
+  const d                             = theme === 'dark';
+  const [users,       setUsers]       = useState<AppUser[]>([]);
+  const [areas,       setAreas]       = useState<AreaConfig[]>(defaultAreas);
+  const [loading,     setLoading]     = useState(true);
+  const [showForm,    setShowForm]    = useState(false);
+  const [editing,     setEditing]     = useState<AppUser | null>(null);
+  const [deleteId,    setDeleteId]    = useState<string | null>(null);
+  const [resetUser,   setResetUser]   = useState<AppUser | null>(null);
+  const [historyUser, setHistoryUser] = useState<AppUser | null>(null);
+  const [toasts,      setToasts]      = useState<ToastItem[]>([]);
+  const counter                       = useRef(0);
 
   const rmToast  = useCallback((id: number) => setToasts(p => p.filter(x => x.id !== id)), []);
   const addToast = useCallback((type: ToastItem['type'], msg: string) => {
@@ -643,10 +851,11 @@ export default function UserManagement({ theme }: { theme: Theme }) {
     return a.username.localeCompare(b.username, 'id-ID');
   });
 
-  const canEdit   = (u: AppUser) => me?.role === 'root' || (me?.role === 'admin' && u.role === 'user');
-  const canDel    = (u: AppUser) => !!me && me.id !== u.id && canEdit(u);
-  const canToggle = (u: AppUser) => !!me && me.id !== u.id && me.role !== 'admin' && canEdit(u);
-  const canReset  = (u: AppUser) => canEdit(u);
+  const canEdit        = (u: AppUser) => me?.role === 'root' || (me?.role === 'admin' && u.role === 'user');
+  const canDel         = (u: AppUser) => !!me && me.id !== u.id && canEdit(u);
+  const canToggle      = (u: AppUser) => !!me && me.id !== u.id && me.role !== 'admin' && canEdit(u);
+  const canReset       = (u: AppUser) => canEdit(u);
+  const canViewHistory = (u: AppUser) => canEdit(u) || u.id === me?.id;
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -674,18 +883,18 @@ export default function UserManagement({ theme }: { theme: Theme }) {
           onReset={handleResetPassword}
         />
       )}
+      {historyUser && (
+        <LoginHistoryModal
+          user={historyUser} theme={theme}
+          onClose={() => setHistoryUser(null)}
+        />
+      )}
 
-      {/* ── TOOLBAR BAR (ganti header card) ── */}
+      {/* ── TOOLBAR BAR ── */}
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        flexWrap: 'wrap',
-        marginBottom: 0,
-        paddingBottom: 12,
-        borderBottom: `1px solid ${t.line}`,
-        flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, flexWrap: 'wrap', marginBottom: 0, paddingBottom: 12,
+        borderBottom: `1px solid ${t.line}`, flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, color: t.tx3, fontFamily: F_MONO }}>
@@ -811,6 +1020,9 @@ export default function UserManagement({ theme }: { theme: Theme }) {
                       {canReset(user) && (
                         <IBtn icon={KeyRound} color={t.purple} bg={t.purpleBg} bd={t.purpleBd} onClick={() => setResetUser(user)} title="Reset Password"/>
                       )}
+                      {canViewHistory(user) && (
+                        <IBtn icon={History} color={t.blue} bg={t.blueBg} bd={t.blueBd} onClick={() => setHistoryUser(user)} title="Riwayat Login"/>
+                      )}
                       {canDel(user) && (
                         <IBtn icon={Trash2} color={t.red} bg={t.redBg} bd={t.redBd} onClick={() => setDeleteId(user.id)} title="Hapus"/>
                       )}
@@ -836,8 +1048,13 @@ export default function UserManagement({ theme }: { theme: Theme }) {
             </div>
           );
         })}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: t.tx4, fontFamily: F_MONO }}>
-          <KeyRound size={10}/> Klik ikon kunci untuk reset password
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, fontSize: 10, color: t.tx4, fontFamily: F_MONO }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <KeyRound size={10}/> Reset password
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <History size={10}/> Riwayat login
+          </span>
         </div>
       </div>
     </div>

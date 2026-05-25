@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { verifyToken } from './jwt';
 import { SessionUser, UserRole, can, Permission } from './types';
 
-export const COOKIE_NAME = 'auth_token';
+export const COOKIE_NAME = 'auth_token_3003';
 
 export async function getSession(): Promise<SessionUser | null> {
   try {

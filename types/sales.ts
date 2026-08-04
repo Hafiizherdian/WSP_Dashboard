@@ -12,6 +12,7 @@ export interface WeeklySales {
   year: number;         // Tahun penjualan
   sales: number;        // Total penjualan minggu tersebut
   target?: number;      // Target penjualan (opsional)
+  omzetTotal?: number;
 }
 
 /**
@@ -24,6 +25,11 @@ export interface OutletSalesData {
   category: string;       // Kategori produk (contoh: Food, Beverage)
   product: string;        // Nama produk (contoh: CAKRA PRIMA 16 K)
   dozNet: number;        // DOZ Net (dozen netto)
+  unitsBks?: number;     // Jumlah unit BKS (opsional)
+  unitsSlop?: number;    // Jumlah unit SLOP (opsional)
+  unitsBal?: number;     // Jumlah unit BAL (opsional)
+  // unitsDos?: number;     // Jumlah unit DOS (opsional)
+  omzet?: number;        // Omzet (opsional)
   sales?: number;         // Total penjualan (opsional)
   target?: number;        // Target penjualan (opsional)
   city?: string;          // Kota/kabupaten
@@ -49,6 +55,7 @@ export interface QuarterlyProductDetail {
   units_slop?: { target: number; actual: number };
   units_bal?:  { target: number; actual: number };
   units_dos?:  { target: number; actual: number };
+  omzet?:      { target: number; actual: number };
 }
 
 // ─── QuarterlyData — versi baru dengan field details ──────────────────────────
@@ -64,6 +71,7 @@ export interface WeeklyBreakdown {
   units_slop?: { target: number; actual: number };
   units_bal?: { target: number; actual: number };
   units_dos?: { target: number; actual: number };
+  omzet?: { target: number; actual: number };
 }
 
 export interface MonthlyBreakdown {
@@ -78,6 +86,7 @@ export interface MonthlyBreakdown {
   units_slop?: { target: number; actual: number };
   units_bal?: { target: number; actual: number };
   units_dos?: { target: number; actual: number };
+  omzet?: { target: number; actual: number };
 }
 
 export interface QuarterlyData {
@@ -87,6 +96,11 @@ export interface QuarterlyData {
   variance: number;             // Selisih actual - target
   variancePercentage: number;   // Persentase variance
   details?: QuarterlyProductDetail[]; // Detail per produk (opsional, untuk filter)
+  unitsBks?: number;     // Jumlah unit BKS (opsional)
+  unitsSlop?: number;    // Jumlah unit SLOP (opsional)
+  unitsBal?: number;     // Jumlah unit BAL (opsional)
+  unitsDos?: number;     // Jumlah unit DOS (opsional)
+  omzet?: number;        // Omzet (opsional)
   
   // New fields for detailed analysis
   weeklyBreakdown?: WeeklyBreakdown[];
@@ -106,6 +120,7 @@ export interface WeekComparisonProductDetail {
   units_slop?: { previous: number; current: number };
   units_bal?: { previous: number; current: number };
   units_dos?: { previous: number; current: number };
+  omzet?: { previous: number; current: number };
 }
 
 export interface WeekComparison {
@@ -132,6 +147,7 @@ units_bks:  { l4w: number; c1w: number; l4wTotal?: number };
 units_slop: { l4w: number; c1w: number; l4wTotal?: number };
 units_bal:  { l4w: number; c1w: number; l4wTotal?: number };
 units_dos:  { l4w: number; c1w: number; l4wTotal?: number };
+omzet: { l4w: number; c1w: number; l4wTotal?: number };
 }
 
 export interface L4WC4WData {
@@ -192,6 +208,7 @@ export interface SalesData {
   comparisonYears: ComparisonYears;
   comparisonWeeks: ComparisonWeeks;
   outletData?: OutletSalesData[];  // Data penjualan per outlet (opsional)
+  piutangList?: PiutangRecord[];
 }
 
 /**
@@ -218,3 +235,22 @@ export interface PartialSalesData {
   product?: string;
   region?: string;
 }
+
+/**
+ * Data piutang dan giro outlet
+ */
+export interface PiutangRecord {
+  faktur: string;      // Nomor Faktur
+  kode: string;        // Kode Outlet (CST-...)
+  outlet: string;      // Nama Outlet
+  kota: string;        // Kota
+  kecamatan: string;   // Kecamatan
+  kelDesa: string;     // Kel/Desa
+  salesman: string;    // Salesman (bisa kosong)
+  tanggal: string;     // Tanggal Faktur
+  jatuhTempo: string;  // Tanggal Jatuh Tempo
+  hari: number | null; // Umur piutang (hari)
+  piutang: number;     // Jumlah Piutang (Rupiah)
+  giro: number;        // Jumlah Giro (Rupiah)
+}
+

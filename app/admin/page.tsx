@@ -19,8 +19,10 @@ import { ROLE_LABELS, UserRole } from '@/lib/auth/types';
 // Komponen yang sudah dipisah
 import UploadPenjualanTab  from '@/components/admin/UploadPenjualanTab';
 import UploadDistribusiTab from '@/components/admin/UploadDistribusiTab';
+import PiutangComponent from '@/components/PiutangSections';
 import SettingsTab         from '@/components/admin/SettingsTab';
 import { tk, Theme, Tokens, FONT_SANS, FONT_MONO } from '@/components/admin/shared';
+import UploadPiutangTab from '@/components/admin/UploadPiutangTab';
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -157,7 +159,8 @@ const NAV_SECTIONS = [
     section: 'DATA',
     items: [
       { id: 'upload-penjualan',  label: 'Upload Penjualan',  icon: Upload,      accent: '#6366f1' },
-      { id: 'upload-distribusi', label: 'Upload Distribusi', icon: TrendingUp,  accent: '#10b981' },
+      { id: 'upload-distribusi', label: 'Upload Distribusi', icon: Upload,      accent: '#10b981' },
+      { id: 'upload-piutang',    label: 'Upload Piutang',    icon: Upload,      accent: '#940d2c' },
       { id: 'areas',             label: 'Management Area',   icon: MapPin,      accent: '#0d9488' },
     ],
   },
@@ -173,6 +176,7 @@ const NAV_SECTIONS = [
 const PERM_MAP: Record<string, string> = {
   'upload-penjualan':  'view_files',
   'upload-distribusi': 'upload_file',
+  'upload-piutang':    'upload_file',
   areas:               'view_areas',
   users:               'manage_users',
   settings:            'view_files',
@@ -180,7 +184,8 @@ const PERM_MAP: Record<string, string> = {
 
 const PAGE_META: Record<string, { title: string; subtitle: string; icon: React.ComponentType<any>; color: string }> = {
   'upload-penjualan':  { title: 'Upload Penjualan',  subtitle: 'File data penjualan (.xlsx)',   icon: Upload,     color: '#6366f1' },
-  'upload-distribusi': { title: 'Upload Distribusi', subtitle: 'File data distribusi (.xlsx)',  icon: TrendingUp, color: '#10b981' },
+  'upload-distribusi': { title: 'Upload Distribusi', subtitle: 'File data distribusi (.xlsx)',  icon: Upload,     color: '#10b981' },
+  'upload-piutang':    { title: 'Upload Piutang',    subtitle: 'FIle data piutang (.xlsx',      icon: Upload,     color: '#940d2c' },
   areas:               { title: 'Management Area',   subtitle: 'Target DOS per area',           icon: MapPin,     color: '#0d9488' },
   users:               { title: 'Manajemen User',    subtitle: 'Kelola akun pengguna',          icon: Users,      color: '#a855f7' },
   settings:            { title: 'Pengaturan',        subtitle: 'Akun & konfigurasi',            icon: Settings,   color: '#f59e0b' },
@@ -464,6 +469,7 @@ function DashboardContent() {
           }}>
           {activeTab === 'upload-penjualan'  && can('view_files')   && <UploadPenjualanTab  dbStats={dbStats} uploadedFiles={uploadedFiles} onRefresh={fetchData} theme={theme} addToast={addToast} />}
           {activeTab === 'upload-distribusi' && can('upload_file')  && <UploadDistribusiTab theme={theme} addToast={addToast} distFiles={distFiles} onRefresh={fetchData} dbStats={dbStats} />}
+          {activeTab === 'upload-piutang'    && can('upload_file')  && <UploadPiutangTab    theme={theme} addToast={addToast}/>}
           {activeTab === 'areas'             && can('view_areas')   && <AreaManagement theme={theme} />}
           {activeTab === 'users'             && can('manage_users') && <UserManagement theme={theme} />}
           {activeTab === 'settings'          && can('view_files')   && <SettingsTab theme={theme} addToast={addToast} />}

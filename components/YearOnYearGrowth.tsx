@@ -431,14 +431,14 @@ export default function YearOnYearGrowthComponent({ data, comparisonYears, theme
         <div style={{
           background: isPos ? t.posBg : t.negBg,
           border: `1px solid ${isPos ? t.posBorder : t.negBorder}`,
-          borderLeft: `3px solid ${deltaColor}`,
+          // borderLeft: `3px solid ${deltaColor}`,
           borderRadius: 12, padding: 18,
         }}>
           <div style={{ fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.07em', color: isPos ? t.posText : t.negText, marginBottom: 6 }}>
             Laju Pertumbuhan
           </div>
           <div style={{ fontSize: 28, fontWeight: 800, color: deltaColor, fontFamily: 'IBM Plex Mono, monospace', letterSpacing: '-0.02em', marginBottom: 6 }}>
-            {isPos ? '+' : ''}{formatPercentage(data.variancePercentage)}
+            {isPos ? '' : ''}{formatPercentage(data.variancePercentage)}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             {isPos ? <TrendingUp size={12} color="#10b981" /> : <TrendingDown size={12} color="#ef4444" />}

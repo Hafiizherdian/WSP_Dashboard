@@ -1387,7 +1387,7 @@ export default function UploadDistribusiTab({
             value={(dbStats.distribution_records ?? 0).toLocaleString('id-ID')}
             cardKey="stat1"
             icon={Database}
-            trend="up"
+            trend="neutral"
             theme={theme}
           />
           <StatCard
@@ -1403,7 +1403,7 @@ export default function UploadDistribusiTab({
                   )}`
                 : undefined
             }
-            trend="up"
+            trend="neutral"
             theme={theme}
           />
         </div>

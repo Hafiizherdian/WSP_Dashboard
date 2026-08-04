@@ -121,8 +121,8 @@ function Sparkline({ data, color, theme }: { data: { w: number; v: number; p: nu
               );
             }}
           />
-          <Line type="monotone" dataKey="p" stroke={`${color}40`} strokeWidth={1.2} dot={false} isAnimationActive={false} strokeDasharray="3 2" />
-          <Line type="monotone" dataKey="v" stroke={color}        strokeWidth={2}   dot={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="p" stroke="#000000" strokeWidth={1.5} dot={false} isAnimationActive={false} strokeDasharray="4 6" />
+          <Line type="monotone" dataKey="v" stroke={color}        strokeWidth={2.5}   dot={false} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -139,6 +139,9 @@ function AchDonut({ pct, actual, target, theme, size = 99 }: { pct: number; actu
   ];
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+        <span style={{ fontSize: 15, fontWeight: 800, fontFamily: 'IBM Plex Mono,monospace', color: clr, lineHeight: 1 }}>{Math.round(pct)}%</span>
+      </div>
       <ResponsiveContainer width="100%" height="100%">
         <RechartsPieChart>
           <Pie data={pie} cx="50%" cy="50%" innerRadius="46%" outerRadius="84%"
@@ -157,9 +160,7 @@ function AchDonut({ pct, actual, target, theme, size = 99 }: { pct: number; actu
           }} />
         </RechartsPieChart>
       </ResponsiveContainer>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-        <span style={{ fontSize: 15, fontWeight: 800, fontFamily: 'IBM Plex Mono,monospace', color: clr, lineHeight: 1 }}>{Math.round(pct)}%</span>
-      </div>
+      
     </div>
   );
 }
@@ -271,9 +272,9 @@ function L4WCell({ l4w, c1w, color, theme }: { l4w: number; c1w: number; color: 
 function VolBadge({ label, val, color, theme }: { label: string; val: number; color: string; theme: Theme }) {
   const t = tk[theme];
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 5, background: `${color}10`, border: `1px solid ${color}25` }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 5, background: `${color}10`, border: `1px solid ${color}25` }}>
       <div style={{ width: 5, height: 5, borderRadius: 1, background: color, flexShrink: 0 }} />
-      <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', color, letterSpacing: '0.04em' }}>{label}</span>
+      <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', color, letterSpacing: '0.04em' }}>{label}</span>
       <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: 'IBM Plex Mono,monospace', color }}>{fmtFull(val)}</span>
     </div>
   );
@@ -516,7 +517,7 @@ export default function AnalysisSection({ data, theme = 'dark' }: AnalysisSectio
 
                   {/* Vol */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <VolBadge label={String(pL)} val={row.volPrev} color="#3bf6b5ae" theme={theme} />
+                    <VolBadge label={String(pL)} val={row.volPrev} color="#577098" theme={theme} />
                     <VolBadge label={String(cL)} val={row.volCurr} color={row.color} theme={theme} />
                   </div>
 
@@ -530,11 +531,11 @@ export default function AnalysisSection({ data, theme = 'dark' }: AnalysisSectio
 
                   {/* YoY Growth */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-                    <span style={{ fontSize: 16, fontWeight: 800, fontFamily: 'IBM Plex Mono,monospace', lineHeight: 1, color: row.volGrowth >= 0 ? t.posText : t.negText }}>{fmtPct(row.volGrowth)}</span>
-                    <span style={{ fontSize: 8, fontFamily: 'IBM Plex Mono,monospace', color: t.textMuted }}>
-                      Δ {row.volGrowth >= 0 ? '+' : ''}{fmtFull(row.volCurr - row.volPrev)}
+                    <span style={{ fontSize: 18, fontWeight: 800, fontFamily: 'IBM Plex Mono,monospace', lineHeight: 1, color: row.volGrowth >= 0 ? t.posText : t.negText }}>{fmtPct(row.volGrowth)}</span>
+                    <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono,monospace', color: t.textMuted }}>
+                      {row.volGrowth >= 0 ? '+' : ''}{fmtFull(row.volCurr - row.volPrev)}
                     </span>
-                    <span style={{ fontSize: 7.5, fontFamily: 'IBM Plex Mono,monospace', padding: '2px 6px', borderRadius: 8, fontWeight: 600, background: row.volGrowth >= 0 ? t.posBg : t.negBg, color: row.volGrowth >= 0 ? t.posText : t.negText, border: `1px solid ${row.volGrowth >= 0 ? t.posBorder : t.negBorder}` }}>
+                    <span style={{ fontSize: 12.5, fontFamily: 'IBM Plex Mono,monospace', padding: '2px 6px', borderRadius: 8, fontWeight: 600, background: row.volGrowth >= 0 ? t.posBg : t.negBg, color: row.volGrowth >= 0 ? t.posText : t.negText, border: `1px solid ${row.volGrowth >= 0 ? t.posBorder : t.negBorder}` }}>
                       {row.volGrowth >= 0 ? '↑ Naik' : '↓ Turun'}
                     </span>
                   </div>

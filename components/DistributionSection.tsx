@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, ReferenceLine,
   PieChart, Pie, Legend,
 } from 'recharts';
 import {
-  TrendingUp, TrendingDown, Users, Package, Store,
+  TrendingUp, Users, Package, Store,
   Target, CheckCircle, Activity,
   Map as MapIcon, RefreshCw,
   ClipboardList, ClipboardCheck, Download,
-  AlertCircle, Minus,
 } from 'lucide-react';
 import { AreaConfig } from '@/lib/areaConfig';
 
@@ -122,6 +121,17 @@ interface CovSalRow {
   av_out:          number;
   achievement_pct: number;
 }
+interface AchSalesmanProductRow {
+  salesman:        string;
+  product:         string;
+  total_plan:      number;
+  total_actual:    number;
+  total_av_in:     number;
+  total_ec:        number;
+  total_av_out:    number;
+  achievement_pct: number;
+  outlet_count:    number;
+}
 interface OutletCountByType {
   outlet_type:  string;
   outlet_count: number;
@@ -164,18 +174,6 @@ interface AchAreaProductRow {
   outlet_count:    number;
 }
 
-interface MissDistRow {
-  outlet:       string;
-  salesman:     string;
-  city:         string;
-  district:     string;
-  outlet_type:  string;
-  total_actual: number;
-  total_ec:     number;
-  total_av_in:  number;
-  total_av_out: number;  
-}
-
 interface DistData {
   summary:                      Summary;
   achievementSalesman:          AchRow[];
@@ -190,13 +188,10 @@ interface DistData {
   achievementAreaSalesman:      AchAreaSalesmanRow[];
   achievementAreaProduct:       AchAreaProductRow[];
   achievementAreaOutletType:    any[];
-  // BARU
-  missDistribusi: MissDistRow[];
-  // WoW: summary minggu sebelumnya untuk delta
-  summaryPrevWeek?:             Partial<Summary>;
+  achievementSalesmanProduct:  AchSalesmanProductRow[]; 
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// ─── Props dari page.tsx ──────────────────────────────────────────────────────
 interface DistributionSectionProps {
   theme?:             Theme;
   areas?:             AreaConfig[];
@@ -229,487 +224,29 @@ function normRows(rows: any[]): any[] {
   }));
 }
 
-// ─── Re-agregasi client-side ──────────────────────────────────────────────────
-function reaggregate(
-  base:       DistData,
-  product:    string,
-  outletType: string,
-  salesman:   string,
-): DistData {
-  const matchProduct  = (p?: string) => !product    || (p ?? '').toLowerCase().includes(product.toLowerCase());
-  const matchOutlet   = (o?: string) => !outletType || (o ?? '').toLowerCase() === outletType.toLowerCase();
-  const matchSalesman = (s?: string) => !salesman   || (s ?? '').toLowerCase().includes(salesman.toLowerCase());
-
-  const covFiltered = base.coverageSalesman.filter(r =>
-    matchProduct(r.product) &&
-    matchSalesman(r.salesman) &&
-    matchOutlet(r.outlet_type)
-  );
-
-  const hasFilter   = !!(product || outletType || salesman);
-  const needCovPath = !!(outletType || salesman);
-
-  const outletCountSalTypeMap = new Map<string, number>();
-  (base.outletCountByTypeSalesman ?? []).forEach(r => {
-    const key = `${r.salesman}||${r.outlet_type}`;
-    outletCountSalTypeMap.set(key, (outletCountSalTypeMap.get(key) ?? 0) + r.outlet_count);
-  });
-
-  const outletCountMap = new Map<string, number>(
-    base.outletCountByType.map(r => [r.outlet_type, r.outlet_count])
-  );
-
-  // ── Achievement Salesman ──────────────────────────────────────────────────
-  const salMap = new Map<string, AchRow>();
-
-  if (needCovPath) {
-    covFiltered.forEach(r => {
-      const key = r.salesman ?? '';
-      const ex  = salMap.get(key);
-      if (!ex) {
-        salMap.set(key, {
-          salesman:        r.salesman,
-          total_plan:      r.plan,
-          total_actual:    r.actual,
-          total_av_out:    r.av_out,
-          achievement_pct: 0,
-          outlet_count:    0,
-        });
-      } else {
-        ex.total_plan   += r.plan;
-        ex.total_actual += r.actual;
-        ex.total_av_out += r.av_out;
-      }
-    });
-    const covSalesmenSet = new Set(covFiltered.map(r => r.salesman));
-    salMap.forEach((row, sal) => {
-      if (!covSalesmenSet.has(sal)) return;
-      let count = 0;
-      (base.outletCountByTypeSalesman ?? []).forEach(r => {
-        if (r.salesman !== sal) return;
-        if (outletType && r.outlet_type.toLowerCase() !== outletType.toLowerCase()) return;
-        count += r.outlet_count;
-      });
-      row.outlet_count = count;
-    });
-  } else {
-    base.achievementSalesman
-      .filter(r => matchProduct(r.product) && matchSalesman(r.salesman))
-      .forEach(r => {
-        const key = r.salesman ?? '';
-        const ex  = salMap.get(key);
-        if (!ex) {
-          salMap.set(key, { ...r, outlet_count: r.outlet_count ?? 0 });
-        } else {
-          ex.total_plan   += r.total_plan;
-          ex.total_actual += r.total_actual;
-          ex.total_av_out += r.total_av_out;
-          ex.outlet_count  = Math.max(ex.outlet_count ?? 0, r.outlet_count ?? 0);
-        }
-      });
-  }
-
-  const achievementSalesman = Array.from(salMap.values())
-    .map(r => ({
-      ...r,
-      achievement_pct: r.total_plan > 0
-        ? Math.round((r.total_av_out / r.total_plan) * 1000) / 10
-        : 0,
-    }))
-    .sort((a, b) => b.achievement_pct - a.achievement_pct);
-
-  // ── Achievement Product ───────────────────────────────────────────────────
-  const prodMap = new Map<string, AchRow>();
-
-  if (needCovPath) {
-    covFiltered.forEach(r => {
-      const key = r.product ?? '';
-      const ex  = prodMap.get(key);
-      if (!ex) {
-        prodMap.set(key, {
-          product:         r.product,
-          category:        base.achievementProduct.find(p => p.product === r.product)?.category ?? '',
-          total_plan:      r.plan,
-          total_actual:    r.actual,
-          total_av_out:    r.av_out,
-          achievement_pct: 0,
-        });
-      } else {
-        ex.total_plan   += r.plan;
-        ex.total_actual += r.actual;
-        ex.total_av_out += r.av_out;
-      }
-    });
-  } else {
-    base.achievementSalesman
-      .filter(r => matchProduct(r.product) && matchSalesman(r.salesman))
-      .forEach(r => {
-        const key = r.product ?? '';
-        const ex  = prodMap.get(key);
-        if (!ex) {
-          prodMap.set(key, {
-            product:         r.product,
-            category:        base.achievementProduct.find(p => p.product === r.product)?.category ?? '',
-            total_plan:      r.total_plan,
-            total_actual:    r.total_actual,
-            total_av_out:    r.total_av_out,
-            achievement_pct: 0,
-          });
-        } else {
-          ex.total_plan   += r.total_plan;
-          ex.total_actual += r.total_actual;
-          ex.total_av_out += r.total_av_out;
-        }
-      });
-  }
-
-  const achievementProduct = Array.from(prodMap.values())
-    .map(r => ({
-      ...r,
-      achievement_pct: r.total_plan > 0
-        ? Math.round((r.total_av_out / r.total_plan) * 1000) / 10
-        : 0,
-    }))
-    .sort((a, b) => b.total_av_out - a.total_av_out);
-
-  // ── Achievement Area ──────────────────────────────────────────────────────
-  const areaMap = new Map<string, AchRow>();
-
-  if (!hasFilter) {
-    base.achievementArea.forEach(r => {
-      areaMap.set(`${r.city}||${r.district}`, { ...r });
-    });
-  } else if (outletType) {
-    const covBySal = new Map<string, { plan: number; actual: number; av_out: number }>();
-    covFiltered.forEach(r => {
-      const ex = covBySal.get(r.salesman);
-      if (!ex) {
-        covBySal.set(r.salesman, { plan: r.plan, actual: r.actual, av_out: r.av_out });
-      } else {
-        ex.plan   += r.plan;
-        ex.actual += r.actual;
-        ex.av_out += r.av_out;
-      }
-    });
-
-    const salAreaLookup = new Map<string, AchAreaSalesmanRow[]>();
-    (base.achievementAreaSalesman ?? []).forEach(r => {
-      if (!salAreaLookup.has(r.salesman)) salAreaLookup.set(r.salesman, []);
-      salAreaLookup.get(r.salesman)!.push(r);
-    });
-
-    covBySal.forEach((totals, sal) => {
-      const areaRows     = salAreaLookup.get(sal) ?? [];
-      const totalPlanSal = areaRows.reduce((s, r) => s + r.total_plan, 0);
-      if (totalPlanSal === 0) return;
-      areaRows.forEach(ar => {
-        const ratio = ar.total_plan / totalPlanSal;
-        const key   = `${ar.city}||${ar.district}`;
-        const ex    = areaMap.get(key);
-        const add   = {
-          plan:   totals.plan   * ratio,
-          actual: totals.actual * ratio,
-          av_out: totals.av_out * ratio,
-        };
-        if (!ex) {
-          areaMap.set(key, {
-            city:            ar.city,
-            district:        ar.district,
-            total_plan:      add.plan,
-            total_actual:    add.actual,
-            total_av_out:    add.av_out,
-            achievement_pct: 0,
-            outlet_count:    ar.outlet_count ?? 0,
-          });
-        } else {
-          ex.total_plan   += add.plan;
-          ex.total_actual += add.actual;
-          ex.total_av_out += add.av_out;
-        }
-      });
-    });
-
-    if (areaMap.size === 0) {
-      base.achievementArea.forEach(r => {
-        areaMap.set(`${r.city}||${r.district}`, { ...r });
-      });
-    }
-  } else if (salesman) {
-    const areaRows = (base.achievementAreaSalesman ?? [])
-      .filter(r => matchSalesman(r.salesman));
-    if (areaRows.length > 0) {
-      areaRows.forEach(r => {
-        const key = `${r.city}||${r.district}`;
-        const ex  = areaMap.get(key);
-        if (!ex) {
-          areaMap.set(key, {
-            city:            r.city,
-            district:        r.district,
-            total_plan:      r.total_plan,
-            total_actual:    r.total_actual,
-            total_av_out:    r.total_av_out,
-            achievement_pct: 0,
-            outlet_count:    r.outlet_count ?? 0,
-          });
-        } else {
-          ex.total_plan   += r.total_plan;
-          ex.total_actual += r.total_actual;
-          ex.total_av_out += r.total_av_out;
-          ex.outlet_count  = (ex.outlet_count ?? 0) + (r.outlet_count ?? 0);
-        }
-      });
-    } else {
-      base.achievementArea.forEach(r => {
-        areaMap.set(`${r.city}||${r.district}`, { ...r });
-      });
-    }
-  } else {
-    const areaProductData = base.achievementAreaProduct ?? [];
-    if (areaProductData.length > 0) {
-      areaProductData
-        .filter(r => matchProduct(r.product))
-        .forEach(r => {
-          const key = `${r.city}||${r.district}`;
-          const ex  = areaMap.get(key);
-          if (!ex) {
-            areaMap.set(key, {
-              city:            r.city,
-              district:        r.district,
-              total_plan:      r.total_plan,
-              total_actual:    r.total_actual,
-              total_av_out:    r.total_av_out,
-              achievement_pct: 0,
-              outlet_count:    r.outlet_count ?? 0,
-            });
-          } else {
-            ex.total_plan   += r.total_plan;
-            ex.total_actual += r.total_actual;
-            ex.total_av_out += r.total_av_out;
-            ex.outlet_count  = Math.max(ex.outlet_count ?? 0, r.outlet_count ?? 0);
-          }
-        });
-    } else {
-      base.achievementArea.forEach(r => {
-        areaMap.set(`${r.city}||${r.district}`, { ...r });
-      });
-    }
-  }
-
-  const achievementArea = Array.from(areaMap.values())
-    .map(r => ({
-      ...r,
-      achievement_pct: r.total_plan > 0
-        ? Math.round((r.total_av_out / r.total_plan) * 1000) / 10
-        : 0,
-    }))
-    .sort((a, b) => b.total_av_out - a.total_av_out);
-
-  // ── Trend ─────────────────────────────────────────────────────────────────
-  let trend: TrendRow[];
-
-  if (needCovPath) {
-    const trendMap = new Map<number, TrendRow>();
-    covFiltered.forEach(r => {
-      const ex = trendMap.get(r.week_num);
-      if (!ex) {
-        trendMap.set(r.week_num, {
-          week:         r.week,
-          week_num:     r.week_num,
-          total_plan:   r.plan,
-          total_actual: r.actual,
-          total_av_in:  r.av_in,
-          total_ec:     r.ec,
-          total_av_out: r.av_out,
-          outlet_count: 0,
-        });
-      } else {
-        ex.total_plan   += r.plan;
-        ex.total_actual += r.actual;
-        ex.total_av_in  += r.av_in;
-        ex.total_ec     += r.ec;
-        ex.total_av_out += r.av_out;
-      }
-    });
-    trend = Array.from(trendMap.values()).sort((a, b) => a.week_num - b.week_num);
-  } else {
-    const trendMap = new Map<number, TrendRow>();
-    base.trend
-      .filter(r => matchProduct(r.product))
-      .forEach(r => {
-        const ex = trendMap.get(r.week_num);
-        if (!ex) {
-          trendMap.set(r.week_num, { ...r });
-        } else {
-          ex.total_plan   += r.total_plan;
-          ex.total_actual += r.total_actual;
-          ex.total_av_in  += r.total_av_in;
-          ex.total_ec     += r.total_ec;
-          ex.total_av_out += r.total_av_out;
-          ex.outlet_count += r.outlet_count;
-        }
-      });
-    trend = Array.from(trendMap.values()).sort((a, b) => a.week_num - b.week_num);
-  }
-
-  // ── Coverage ──────────────────────────────────────────────────────────────
-  const covMap = new Map<string, CovRow>();
-
-  if (needCovPath) {
-    covFiltered.forEach(r => {
-      const key = r.outlet_type ?? '';
-      const ex  = covMap.get(key);
-      if (!ex) {
-        covMap.set(key, {
-          outlet_type:     key,
-          total_plan:      r.plan,
-          total_actual:    r.actual,
-          total_av_in:     r.av_in,
-          total_ec:        r.ec,
-          total_av_out:    r.av_out,
-          outlet_count:    0,
-          achievement_pct: 0,
-        });
-      } else {
-        ex.total_plan   += r.plan;
-        ex.total_actual += r.actual;
-        ex.total_av_in  += r.av_in;
-        ex.total_ec     += r.ec;
-        ex.total_av_out += r.av_out;
-      }
-    });
-  } else {
-    base.coverage
-      .filter(r => matchProduct(r.product))
-      .forEach(r => {
-        const key = r.outlet_type ?? '';
-        const ex  = covMap.get(key);
-        if (!ex) {
-          covMap.set(key, { ...r, outlet_count: 0 });
-        } else {
-          ex.total_plan   += r.total_plan;
-          ex.total_actual += r.total_actual;
-          ex.total_av_in  += r.total_av_in;
-          ex.total_ec     += r.total_ec;
-          ex.total_av_out += r.total_av_out;
-        }
-      });
-  }
-
-  const coverage = Array.from(covMap.values())
-    .map(r => {
-      let outletCount = 0;
-      if (salesman) {
-        (base.outletCountByTypeSalesman ?? []).forEach(ocr => {
-          if (ocr.outlet_type !== r.outlet_type) return;
-          if (!matchSalesman(ocr.salesman)) return;
-          outletCount += ocr.outlet_count;
-        });
-      } else {
-        outletCount = outletCountMap.get(r.outlet_type) ?? 0;
-      }
-      return {
-        ...r,
-        outlet_count:    outletCount,
-        achievement_pct: r.total_plan > 0
-          ? Math.round((r.total_av_out / r.total_plan) * 1000) / 10
-          : 0,
-      };
-    })
-    .sort((a, b) => b.total_av_out - a.total_av_out);
-
-  // ── Coverage Salesman heatmap ─────────────────────────────────────────────
-  const covSalMap = new Map<string, CovSalRow>();
-  covFiltered.forEach(r => {
-    const key = `${r.salesman}||${r.week}`;
-    const ex  = covSalMap.get(key);
-    if (!ex) {
-      covSalMap.set(key, { ...r });
-    } else {
-      ex.plan   += r.plan;
-      ex.actual += r.actual;
-      ex.av_in  += r.av_in;
-      ex.ec     += r.ec;
-      ex.av_out += r.av_out;
-    }
-  });
-  const coverageSalesman = Array.from(covSalMap.values())
-    .map(r => ({
-      ...r,
-      achievement_pct: r.plan > 0
-        ? Math.round((r.av_out / r.plan) * 1000) / 10
-        : 0,
-    }));
-
-  // ── Summary ───────────────────────────────────────────────────────────────
-  const totalPlan   = trend.reduce((s, r) => s + r.total_plan,   0);
-  const totalActual = trend.reduce((s, r) => s + r.total_actual, 0);
-  const totalAvIn   = trend.reduce((s, r) => s + r.total_av_in,  0);
-  const totalEc     = trend.reduce((s, r) => s + r.total_ec,     0);
-  const totalAvOut  = trend.reduce((s, r) => s + r.total_av_out, 0);
-
-  let totalOutlets: number;
-  if (!hasFilter) {
-    totalOutlets = base.totalOutlets;
-  } else if (salesman && outletType) {
-    totalOutlets = 0;
-    (base.outletCountByTypeSalesman ?? []).forEach(r => {
-      if (matchSalesman(r.salesman) && r.outlet_type.toLowerCase() === outletType.toLowerCase()) {
-        totalOutlets += r.outlet_count;
-      }
-    });
-  } else if (salesman) {
-    totalOutlets = 0;
-    (base.outletCountByTypeSalesman ?? []).forEach(r => {
-      if (matchSalesman(r.salesman)) totalOutlets += r.outlet_count;
-    });
-  } else if (outletType) {
-    totalOutlets = outletCountMap.get(outletType) ?? 0;
-  } else {
-    totalOutlets = base.totalOutlets;
-  }
-
-  const totalSalesmen = new Set(achievementSalesman.map(r => r.salesman)).size;
-  const totalProducts = achievementProduct.length;
-
-  const summary: Summary = {
-    ...base.summary,
-    total_plan:          totalPlan,
-    total_actual:        totalActual,
-    total_av_in:         totalAvIn,
-    total_ec:            totalEc,
-    total_av_out:        totalAvOut,
-    total_outlets:       totalOutlets,
-    total_salesmen:      totalSalesmen,
-    total_products:      totalProducts,
-    overall_achievement: totalPlan > 0
-      ? Math.round((totalAvOut / totalPlan) * 1000) / 10
-      : 0,
-  };
-
-  // ── Miss EC — filter sesuai filter aktif ──────────────────────────────────
-  const missDistribusi = (base.missDistribusi ?? []).filter(r =>
-    matchSalesman(r.salesman) &&
-    matchOutlet(r.outlet_type)
-  );
-
-  return {
-    summary,
-    achievementSalesman,
-    achievementProduct,
-    achievementArea,
-    trend,
-    coverage,
-    coverageSalesman,
-    outletCountByType:            base.outletCountByType,
-    outletCountByTypeSalesman:    base.outletCountByTypeSalesman,
-    totalOutlets:                 base.totalOutlets,
-    achievementAreaSalesman:      base.achievementAreaSalesman   ?? [],
-    achievementAreaProduct:       base.achievementAreaProduct    ?? [],
-    achievementAreaOutletType:    base.achievementAreaOutletType ?? [],
-    missDistribusi,
-    summaryPrevWeek:              base.summaryPrevWeek,
-  };
-}
+// NOTE:
+// Fungsi reaggregate() client-side SUDAH DIHAPUS.
+// Dulu di sini ada agregasi ulang (SUM manual) yang membuat angka Plan/Actual/
+// Av-In/EC/Av-Out di UI berbeda dari hasil query server (route.ts), karena server
+// melakukan dedup per outlet lewat CTE outlet_agg (MAX(CASE WHEN metric>0...)),
+// sedangkan reaggregate() SUM baris mentah — berpotensi double count outlet yang
+// sama di beberapa baris (misal lintas minggu / lintas tipe outlet).
+//
+// Sekarang: fetch ke /api/distribution HANYA terjadi ketika tombol "Terapkan"
+// ditekan (loadData) atau saat areaFilter berganti (reset). Filter dropdown
+// (Produk / Tipe Outlet / Salesman) TIDAK auto-fetch lagi begitu dipilih —
+// nilainya cuma disimpan di state lokal dan baru dikirim ke server saat
+// "Terapkan" ditekan. Ini sengaja dihilangkan (dulu ada useEffect yang watch
+// productFilter/outletTypeFilter/salesmanFilter dan langsung fetch) karena:
+//   1) User experience: filter dropdown ikut nunggu tombol, konsisten dengan
+//      filter minggu yang juga baru jalan pas "Terapkan" ditekan.
+//   2) Bug infinite-loop: fetchData sempat dimasukkan ke dependency array
+//      useEffect tsb. Karena fetchData (useCallback) bergantung pada
+//      onDataLoaded/setLoading dari props, dan kalau parent tidak
+//      me-memoize callback itu, fetchData dapat referensi BARU setiap kali
+//      parent re-render -> useEffect ke-trigger lagi -> fetch lagi -> parent
+//      re-render lagi -> ...berulang terus tanpa henti. Menghapus effect ini
+//      menghilangkan sumber loop tersebut sekaligus.
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function AchBadge({ pct, theme }: { pct: number; theme: Theme }) {
@@ -725,34 +262,7 @@ function AchBadge({ pct, theme }: { pct: number; theme: Theme }) {
   );
 }
 
-// ─── BARU: WoW Delta badge ─────────────────────────────────────────────────────
-// function WowDelta({ current, prev, theme }: { current: number; prev?: number; theme: Theme }) {
-//   const t = tk[theme];
-//   if (prev === undefined || prev === null) return null;
-//   const delta = current - prev;
-//   if (Math.abs(delta) < 0.05) {
-//     return (
-//       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9, fontFamily: 'IBM Plex Mono,monospace', color: t.textMuted }}>
-//         <Minus size={9} />0
-//       </span>
-//     );
-//   }
-//   const up  = delta > 0;
-//   const clr = up ? t.posText : t.negText;
-//   return (
-//     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9, fontFamily: 'IBM Plex Mono,monospace', color: clr }}>
-//       {up ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
-//       {up ? '+' : ''}{delta.toFixed(1)}
-//     </span>
-//   );
-// }
-
-function KpiCard({
-  label, value, sub, icon: Icon, color, theme, wowCurrent, wowPrev,
-}: {
-  label: string; value: string; sub?: string; icon: any; color: string; theme: Theme;
-  wowCurrent?: number; wowPrev?: number;
-}) {
+function KpiCard({ label, value, sub, icon: Icon, color, theme }: { label: string; value: string; sub?: string; icon: any; color: string; theme: Theme }) {
   const t = tk[theme];
   return (
     <div style={{ background: t.cardBg, border: `1px solid ${t.borderCard}`, borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6, position: 'relative', overflow: 'hidden' }}>
@@ -764,12 +274,7 @@ function KpiCard({
         <span style={{ fontSize: 9, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase', letterSpacing: '0.08em', color: t.textMuted }}>{label}</span>
       </div>
       <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'IBM Plex Mono,monospace', color: t.text, lineHeight: 1, letterSpacing: '-0.02em' }}>{value}</div>
-      {/* <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-        {sub && <div style={{ fontSize: 9, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>{sub}</div>}
-        {wowCurrent !== undefined && (
-          <WowDelta current={wowCurrent} prev={wowPrev} theme={theme} />
-        )}
-      </div> */}
+      {sub && <div style={{ fontSize: 9, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>{sub}</div>}
     </div>
   );
 }
@@ -820,126 +325,26 @@ function FilterBadge({ label, value, onClear, theme }: { label: string; value: s
   );
 }
 
-// ─── BARU: Funnel Component ───────────────────────────────────────────────────
-function DistributionFunnel({ summary, theme }: { summary: Summary; theme: Theme }) {
-  const t = tk[theme];
-
-  const steps = [
-    { label: 'Plan',   value: summary.total_plan,   color: '#3b82f6', desc: 'Target distribusi' },
-    { label: 'Actual', value: summary.total_actual,  color: '#8b5cf6', desc: 'Realisasi kunjungan' },
-    { label: 'Av-In',  value: summary.total_av_in,   color: '#0d9488', desc: 'Barang masuk outlet' },
-    { label: 'EC',     value: summary.total_ec,      color: '#10b981', desc: 'Effective call (order)' },
-    { label: 'Av-Out', value: summary.total_av_out,  color: achColor(summary.overall_achievement), desc: 'Tersedia di outlet' },
-  ];
-
-  const maxVal = steps[0].value || 1;
-
-  return (
-    <div style={{ background: t.cardBg, border: `1px solid ${t.borderCard}`, borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono,monospace' }}>
-          Funnel Distribusi
-        </div>
-        <div style={{ fontSize: 9, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>
-          Plan → Av-Out
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {steps.map((step, i) => {
-          const pct     = maxVal > 0 ? (step.value / maxVal) * 100 : 0;
-          const dropPct = i > 0 && steps[i - 1].value > 0
-            ? ((steps[i - 1].value - step.value) / steps[i - 1].value) * 100
-            : null;
-          return (
-            <div key={step.label}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                <div style={{ width: 52, fontSize: 10, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', color: step.color, flexShrink: 0 }}>
-                  {step.label}
-                </div>
-                <div style={{ flex: 1, height: 20, borderRadius: 4, background: t.borderCard, overflow: 'hidden', position: 'relative' }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${Math.min(100, pct)}%`,
-                    background: step.color,
-                    opacity: 0.85,
-                    borderRadius: 4,
-                    transition: 'width 0.5s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    paddingLeft: 8,
-                    minWidth: step.value > 0 ? 40 : 0,
-                  }}>
-                    {pct > 15 && (
-                      <span style={{ fontSize: 9, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', color: '#fff', whiteSpace: 'nowrap' }}>
-                        {fmtN(step.value)}
-                      </span>
-                    )}
-                  </div>
-                  {pct <= 15 && step.value > 0 && (
-                    <span style={{ position: 'absolute', left: `calc(${pct}% + 6px)`, top: '50%', transform: 'translateY(-50%)', fontSize: 9, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', color: t.textSub, whiteSpace: 'nowrap' }}>
-                      {fmtN(step.value)}
-                    </span>
-                  )}
-                </div>
-                <div style={{ width: 70, textAlign: 'right', flexShrink: 0 }}>
-                  {dropPct !== null && dropPct > 0.5 ? (
-                    <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono,monospace', color: t.negText, background: t.negBg, border: `1px solid ${t.negBorder}`, padding: '1px 5px', borderRadius: 4 }}>
-                      ↓ {dropPct.toFixed(1)}%
-                    </span>
-                  ) : i === 0 ? (
-                    <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono,monospace', color: t.textMuted }}>baseline</span>
-                  ) : (
-                    <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono,monospace', color: t.posText }}>≈ flat</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${t.border}`, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        {steps.map((step, i) => {
-          if (i === 0) return null;
-          const convRate = steps[0].value > 0 ? (step.value / steps[0].value) * 100 : 0;
-          return (
-            <div key={step.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 8, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase' }}>{step.label} / Plan</span>
-              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', color: step.color }}>{convRate.toFixed(1)}%</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ─── Distribution Tabs ────────────────────────────────────────────────────────
 function DistributionTabs({
   data,
   theme,
-  hasAreaFilterWarning,
-  onReload,
 }: {
   data: DistData;
   theme: Theme;
-  hasAreaFilterWarning: boolean;
-  onReload: () => void;
 }) {
   const t = tk[theme];
   const [tabValue, setTabValue] = useState(0);
 
-  const missDistCount = data.missDistribusi?.length ?? 0;
-
   const tabs = [
-    { label: 'Achievement',    icon: Target,       color: '#10b981', content: <AchievementContent data={data} theme={theme} hasAreaFilterWarning={hasAreaFilterWarning} onReload={onReload} /> },
-    { label: 'Trend Mingguan', icon: Activity,     color: '#3b82f6', content: <TrendContent       data={data} theme={theme} /> },
-    { label: 'Outlet',         icon: Store,        color: '#f59e0b', content: <CoverageContent    data={data} theme={theme} /> },
-    { label: 'Miss Distribusi',icon: AlertCircle,  color: '#ef4444', content: <MissDistContent    data={data} theme={theme} />, badge: missDistCount  },
+    { label: 'Achievement',    icon: Target,   color: '#10b981', content: <AchievementContent data={data} theme={theme} /> },
+    { label: 'Trend Mingguan', icon: Activity, color: '#3b82f6', content: <TrendContent       data={data} theme={theme} /> },
+    { label: 'Outlet',         icon: Store,    color: '#f59e0b', content: <CoverageContent    data={data} theme={theme} /> },
   ];
 
   return (
     <div style={{ width: '100%', background: t.cardBg, border: `1px solid ${t.borderCard}`, borderRadius: 12, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg, overflowX: 'auto', position: 'sticky', top: 0, zIndex: 40 }}>
         {tabs.map((tab, i) => {
           const Icon     = tab.icon;
           const isActive = tabValue === i;
@@ -966,18 +371,6 @@ function DistributionTabs({
                 <Icon size={10} color={isActive ? tab.color : t.textMuted} />
               </div>
               {tab.label}
-              {'badge' in tab && tab.badge! > 0 && (
-                <span style={{
-                  fontSize: 9, fontWeight: 700, padding: '0px 5px', borderRadius: 99,
-                  background: isActive ? t.negBg : 'rgba(239,68,68,0.12)',
-                  color: '#ef4444',
-                  border: '1px solid rgba(239,68,68,0.25)',
-                  fontFamily: 'IBM Plex Mono,monospace',
-                  marginLeft: 2,
-                }}>
-                  {tab.badge}
-                </span>
-              )}
             </button>
           );
         })}
@@ -993,13 +386,9 @@ function DistributionTabs({
 function AchievementContent({
   data,
   theme,
-  hasAreaFilterWarning,
-  onReload,
 }: {
   data: DistData;
   theme: Theme;
-  hasAreaFilterWarning: boolean;
-  onReload: () => void;
 }) {
   const t  = tk[theme];
   const ts = { fontSize: 8, fill: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' };
@@ -1026,75 +415,117 @@ function AchievementContent({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', gap: 4, background: t.tabBg, borderRadius: 8, padding: 3, width: 'fit-content' }}>
-        {tabs.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setView(id)}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', border: 'none', cursor: 'pointer', background: view === id ? t.tabActive : 'transparent', color: view === id ? t.tabActiveText : t.textMuted, transition: 'all 0.15s' }}>
-            <Icon size={11} />{label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── DIPERBAIKI: warning area dengan tombol reload ── */}
-      {view === 'area' && hasAreaFilterWarning && (
-        <div style={{
-          padding: '8px 12px', borderRadius: 8,
-          background: t.warnBg, border: `1px solid ${t.warnBorder}`,
-          fontSize: 10, fontFamily: 'IBM Plex Mono,monospace', color: t.warnText,
-          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-        }}>
-          <Activity size={12} />
-          <span style={{ flex: 1 }}>
-            Data area belum akurat untuk filter ini.
-          </span>
-          <button
-            onClick={onReload}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              padding: '3px 10px', borderRadius: 4, border: `1px solid ${t.warnBorder}`,
-              background: t.warnBg, color: t.warnText, cursor: 'pointer',
-              fontSize: 10, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace',
-            }}
-          >
-            <RefreshCw size={10} /> Reload Data Area
-          </button>
+      <div style={{ position: 'sticky', top: TAB_BAR_H, zIndex: 35, background: t.cardBg, paddingTop: 4, paddingBottom: 4 }}>
+        <div style={{ display: 'flex', gap: 4, background: t.tabBg, borderRadius: 8, padding: 3, width: 'fit-content' }}>
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button key={id} onClick={() => setView(id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', border: 'none', cursor: 'pointer', background: view === id ? t.tabActive : 'transparent', color: view === id ? t.tabActiveText : t.textMuted, transition: 'all 0.15s' }}>
+              <Icon size={11} />{label}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       <div style={{ background: t.accordionBg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '12px 14px' }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono,monospace', marginBottom: 10 }}>
-          Plan vs Av-Out — Top {chartData.length}
+          Achievement per Salesman × Produk
         </div>
-        {chartData.length === 0 ? (
-          <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textMuted, fontSize: 11, fontFamily: 'IBM Plex Mono,monospace' }}>Belum ada data.</div>
+        {data.achievementSalesmanProduct.length === 0 ? (
+          <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textMuted, fontSize: 11, fontFamily: 'IBM Plex Mono,monospace' }}>
+            Belum ada data.
+          </div>
         ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 60, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={t.gridStroke} horizontal={false} />
-              <XAxis type="number" tick={ts} axisLine={false} tickLine={false} tickFormatter={fmtN} />
-              <YAxis type="category" dataKey="name" tick={{ ...ts, fontSize: 9 }} axisLine={false} tickLine={false} width={120} />
-              <Tooltip content={<CT theme={theme} />} />
-              <Bar dataKey="plan"   name="Plan"   fill="#3b82f6" opacity={0.35} radius={[0,3,3,0]} maxBarSize={10} />
-              <Bar dataKey="av_out" name="Av-Out" radius={[0,3,3,0]} maxBarSize={10}>
-                {chartData.map((d, i) => <Cell key={i} fill={achColor(d.pct)} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 480 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono,monospace' }}>
+              <thead>
+                <tr>
+                  {['Salesman', 'Produk', 'Plan', 'Aktual', 'Av-In', 'EC', 'Av-Out', 'Achievement', 'Outlet'].map((h, i) => (
+                    <th key={i} style={{ padding: '6px 10px', textAlign: i > 1 ? 'right' : 'left', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 20, background: t.tableHeadBg }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  // Data dari server sudah per (salesman, product) — tinggal
+                  // dikelompokkan untuk tampilan bergaya pivot (nama salesman
+                  // cuma muncul di baris pertama grup + baris Total di akhir).
+                  const groups = new Map<string, AchSalesmanProductRow[]>();
+                  data.achievementSalesmanProduct.forEach(r => {
+                    const key = r.salesman || '-';
+                    if (!groups.has(key)) groups.set(key, []);
+                    groups.get(key)!.push(r);
+                  });
+
+                  const rendered: React.ReactNode[] = [];
+                  const entries = Array.from(groups.entries());
+
+                  entries.forEach(([salesman, rows], gi) => {
+                    const totalPlan   = rows.reduce((s, r) => s + r.total_plan,   0);
+                    const totalActual = rows.reduce((s, r) => s + r.total_actual, 0);
+                    const totalAvIn   = rows.reduce((s, r) => s + r.total_av_in,  0);
+                    const totalEc     = rows.reduce((s, r) => s + r.total_ec,     0);
+                    const totalAvOut  = rows.reduce((s, r) => s + r.total_av_out, 0);
+                    const totalPct    = totalPlan > 0 ? (totalAvOut / totalPlan) * 100 : 0;
+
+                    rows.forEach((r, ri) => {
+                      rendered.push(
+                        <tr key={`${salesman}-${r.product}`}
+                          style={{ background: ri % 2 === 1 ? t.rowAlt : 'transparent' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = t.rowHover)}
+                          onMouseLeave={e => (e.currentTarget.style.background = ri % 2 === 1 ? t.rowAlt : 'transparent')}>
+                          <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: ri === 0 ? 700 : 400, color: ri === 0 ? t.text : t.textSub, whiteSpace: 'nowrap' }}>
+                            {ri === 0 ? salesman : ''}
+                          </td>
+                          <td style={{ padding: '6px 10px', fontSize: 10, color: t.textSub, whiteSpace: 'nowrap' }}>{r.product || '—'}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 10, color: '#3b82f6', textAlign: 'right' }}>{fmtN(r.total_av_in)}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 10, color: '#10b981', textAlign: 'right' }}>{fmtN(r.total_ec)}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right' }}><PBar pct={r.achievement_pct} theme={theme} /></td>
+                          <td style={{ padding: '6px 10px', fontSize: 10, color: t.textSub, textAlign: 'right' }}>
+                            {(r.outlet_count ?? 0) > 0 ? fmtN(r.outlet_count) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    });
+
+                    rendered.push(
+                      // <tr key={`${salesman}-total`} style={{ background: t.tableHeadBg, borderTop: `1px solid ${t.border}`, borderBottom: gi < entries.length - 1 ? `2px solid ${t.border}` : 'none' }}>
+                      //   <td colSpan={2} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.text }}>{salesman} Total</td>
+                      //   <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.textSub, textAlign: 'right' }}>{fmtN(totalPlan)}</td>
+                      //   <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.textSub, textAlign: 'right' }}>{fmtN(totalActual)}</td>
+                      //   <td style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, color: '#3b82f6', textAlign: 'right' }}>{fmtN(totalAvIn)}</td>
+                      //   <td style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, color: '#10b981', textAlign: 'right' }}>{fmtN(totalEc)}</td>
+                      //   <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(totalAvOut)}</td>
+                      //   <td style={{ padding: '6px 10px', textAlign: 'right' }}><AchBadge pct={totalPct} theme={theme} /></td>
+                      //   <td style={{ padding: '6px 10px' }} />
+                      // </tr>
+                    );
+                  });
+
+                  return rendered;
+                })()}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 480 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono,monospace' }}>
             <thead>
-              <tr style={{ background: t.tableHeadBg }}>
+              <tr>
                 {(() => {
                   const headers =
                     view === 'salesman' ? ['#', 'Salesman', 'Plan', 'Av-Out', 'Achievement', 'Outlet'] :
                     view === 'product'  ? ['#', 'Produk', 'Kategori', 'Plan', 'Av-Out', 'Achievement'] :
                                          ['#', 'Kota · Kecamatan', 'Plan', 'Av-Out', 'Achievement', 'Outlet'];
                   return headers.map((h, i) => (
-                    <th key={i} style={{ padding: '8px 12px', textAlign: i > 1 ? 'right' : 'left', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={i} style={{ padding: '8px 12px', textAlign: i > 1 ? 'right' : 'left', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 20, background: t.tableHeadBg }}>{h}</th>
                   ));
                 })()}
               </tr>
@@ -1204,12 +635,12 @@ function TrendContent({ data, theme }: { data: DistData; theme: Theme }) {
       </div>
 
       <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 420 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono,monospace' }}>
             <thead>
-              <tr style={{ background: t.tableHeadBg }}>
+              <tr>
                 {['Minggu','Plan','Actual','Av-In','EC','Av-Out','Achievement','Outlet'].map((h, i) => (
-                  <th key={i} style={{ padding: '8px 12px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={i} style={{ padding: '8px 12px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 20, background: t.tableHeadBg }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1230,7 +661,7 @@ function TrendContent({ data, theme }: { data: DistData; theme: Theme }) {
                     <td style={{ padding: '7px 12px', fontSize: 11, color: '#10b981', textAlign: 'right' }}>{fmtN(r.total_ec)}</td>
                     <td style={{ padding: '7px 12px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
                     <td style={{ padding: '7px 12px', textAlign: 'right' }}><AchBadge pct={pct} theme={theme} /></td>
-                    <td style={{ padding: '7px 12px', fontSize: 10, color: t.textSub, textAlign: 'right' }}>{(r.outlet_count ?? 0) > 0 ? fmtN(r.outlet_count!) : '—'}</td>
+                    <td style={{ padding: '7px 12px', fontSize: 10, color: t.textSub, textAlign: 'right' }}>{r.outlet_count || '—'}</td>
                   </tr>
                 );
               })}
@@ -1243,7 +674,13 @@ function TrendContent({ data, theme }: { data: DistData; theme: Theme }) {
 }
 
 // ─── Coverage Content ─────────────────────────────────────────────────────────
-function CoverageContent({ data, theme }: { data: DistData; theme: Theme }) {
+function CoverageContent({
+  data,
+  theme,
+}: {
+  data: DistData;
+  theme: Theme;
+}) {
   const t   = tk[theme];
   const ts  = { fontSize: 8, fill: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' };
   const cov = data.coverage;
@@ -1307,12 +744,12 @@ function CoverageContent({ data, theme }: { data: DistData; theme: Theme }) {
 
       <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
         <div style={{ padding: '10px 14px', borderBottom: `1px solid ${t.border}`, fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono,monospace' }}>Detail per Tipe Outlet</div>
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 360 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono,monospace' }}>
             <thead>
-              <tr style={{ background: t.tableHeadBg }}>
-                {['Tipe Outlet','Plan','Av-Out','Achievement','Av-In','EC','Actual','Outlet'].map((h, i) => (
-                  <th key={i} style={{ padding: '7px 12px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+              <tr>
+                {['Tipe Outlet','Plan','Actual','Av-In','EC','Av-Out','Achievement','Outlet'].map((h, i) => (
+                  <th key={i} style={{ padding: '7px 12px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 20, background: t.tableHeadBg }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1326,11 +763,11 @@ function CoverageContent({ data, theme }: { data: DistData; theme: Theme }) {
                   onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 1 ? t.rowAlt : 'transparent')}>
                   <td style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600, color: t.text }}>{r.outlet_type || '—'}</td>
                   <td style={{ padding: '7px 12px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
-                  <td style={{ padding: '7px 12px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
-                  <td style={{ padding: '7px 12px', textAlign: 'right' }}><AchBadge pct={r.achievement_pct} theme={theme} /></td>
+                  <td style={{ padding: '7px 12px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
                   <td style={{ padding: '7px 12px', fontSize: 11, color: '#3b82f6', textAlign: 'right' }}>{fmtN(r.total_av_in)}</td>
                   <td style={{ padding: '7px 12px', fontSize: 11, color: '#10b981', textAlign: 'right' }}>{fmtN(r.total_ec)}</td>
-                  <td style={{ padding: '7px 12px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
+                  <td style={{ padding: '7px 12px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
+                  <td style={{ padding: '7px 12px', textAlign: 'right' }}><AchBadge pct={r.achievement_pct} theme={theme} /></td>
                   <td style={{ padding: '7px 12px', fontSize: 10, color: t.textSub, textAlign: 'right' }}>
                     {r.outlet_count > 0 ? fmtN(r.outlet_count) : '—'}
                   </td>
@@ -1401,153 +838,6 @@ function CoverageContent({ data, theme }: { data: DistData; theme: Theme }) {
   );
 }
 
-// ─── BARU: Miss EC Content ────────────────────────────────────────────────────
-function MissDistContent({ data, theme }: { data: DistData; theme: Theme }) {
-  const t    = tk[theme];
-  const rows = data.missDistribusi ?? [];
-
-  const bySalesman = useMemo(() => {
-    const m = new Map<string, { salesman: string; count: number; total_actual: number }>();
-    rows.forEach(r => {
-      const ex = m.get(r.salesman);
-      if (!ex) m.set(r.salesman, { salesman: r.salesman, count: 1, total_actual: r.total_actual });
-      else { ex.count += 1; ex.total_actual += r.total_actual; }
-    });
-    return Array.from(m.values()).sort((a, b) => b.count - a.count);
-  }, [rows]);
-
-  const ts = { fontSize: 8, fill: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' };
-
-  if (rows.length === 0) {
-    return (
-      <div style={{ padding: '40px 20px', textAlign: 'center', color: t.textMuted, fontSize: 12,
-        fontFamily: 'IBM Plex Mono,monospace', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', gap: 10 }}>
-        <CheckCircle size={28} color={t.posText} />
-        <div>
-          <div style={{ fontWeight: 700, color: t.posText, marginBottom: 4 }}>Tidak ada Miss Distribusi</div>
-          <div style={{ fontSize: 11 }}>Semua outlet yang dikunjungi sudah mendapat distribusi (Av-Out &gt; 0).</div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-      {/* Konteks */}
-      <div style={{ padding: '10px 14px', borderRadius: 8, background: t.negBg,
-        border: `1px solid ${t.negBorder}`, fontSize: 10,
-        fontFamily: 'IBM Plex Mono,monospace', color: t.negText,
-        display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <AlertCircle size={12} style={{ flexShrink: 0, marginTop: 1 }} />
-        <span>
-          <b>{rows.length} outlet</b> dikunjungi (Actual ≥ 1) tapi tidak ada distribusi (Av-Out = 0).
-          Outlet sudah terjangkau namun produk tidak masuk outlet.
-        </span>
-      </div>
-
-      {/* Bar chart per salesman */}
-      {bySalesman.length > 0 && (
-        <div style={{ background: t.accordionBg, border: `1px solid ${t.border}`,
-          borderRadius: 10, padding: '12px 14px' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: t.text,
-            fontFamily: 'IBM Plex Mono,monospace', marginBottom: 10 }}>
-            Jumlah Outlet Miss Distribusi per Salesman
-          </div>
-          <ResponsiveContainer width="100%" height={Math.min(220, bySalesman.length * 32 + 20)}>
-            <BarChart data={bySalesman.slice(0, 10)} layout="vertical"
-              margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={t.gridStroke} horizontal={false} />
-              <XAxis type="number" tick={ts} axisLine={false} tickLine={false} allowDecimals={false} />
-              <YAxis type="category" dataKey="salesman"
-                tick={{ ...ts, fontSize: 9 }} axisLine={false} tickLine={false} width={110} />
-              <Tooltip content={<CT theme={theme} />} />
-              <Bar dataKey="count" name="Outlet Miss Distribusi"
-                fill="#ef4444" opacity={0.8} radius={[0,3,3,0]} maxBarSize={12}>
-                {bySalesman.map((_, i) => <Cell key={i} fill="#ef4444" />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Tabel detail */}
-      <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 14px', borderBottom: `1px solid ${t.border}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: t.text,
-            fontFamily: 'IBM Plex Mono,monospace' }}>
-            Detail Outlet Miss Distribusi
-          </span>
-          <span style={{ fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>
-            {rows.length} outlet · diurutkan dari kunjungan terbanyak
-          </span>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse',
-            fontFamily: 'IBM Plex Mono,monospace' }}>
-            <thead>
-              <tr style={{ background: t.tableHeadBg }}>
-                {['#','Outlet','Salesman','Tipe','Kota · Kecamatan','Av-In','Actual','Av-Out'].map((h, i) => (
-                  <th key={i} style={{
-                    padding: '7px 12px', textAlign: i >= 5 ? 'right' : 'left',
-                    fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-                    letterSpacing: '0.07em', color: t.tableHeadText,
-                    borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap',
-                  }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i}
-                  style={{ background: i % 2 === 1 ? t.rowAlt : 'transparent' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = t.rowHover)}
-                  onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 1 ? t.rowAlt : 'transparent')}>
-                  <td style={{ padding: '7px 12px', fontSize: 10, color: t.textMuted }}>{i + 1}</td>
-                  <td style={{ padding: '7px 12px', fontSize: 11, fontWeight: 600,
-                    color: t.text, whiteSpace: 'nowrap' }}>{r.outlet || '—'}</td>
-                  <td style={{ padding: '7px 12px', fontSize: 11,
-                    color: t.textSub, whiteSpace: 'nowrap' }}>{r.salesman || '—'}</td>
-                  <td style={{ padding: '7px 12px', fontSize: 10,
-                    color: t.textMuted, whiteSpace: 'nowrap' }}>
-                    <span style={{ padding: '1px 6px', borderRadius: 4,
-                      background: t.inputBg, border: `1px solid ${t.border}` }}>
-                      {r.outlet_type || '—'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '7px 12px', fontSize: 10,
-                    color: t.textSub, whiteSpace: 'nowrap' }}>
-                    {r.city || '—'} · {r.district || '—'}
-                  </td>
-                  <td style={{ padding: '7px 12px', fontSize: 11,
-                    color: '#3b82f6', textAlign: 'right' }}>{fmtN(r.total_av_in)}</td>
-                  <td style={{ padding: '7px 12px', fontSize: 11,
-                    color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
-                  <td style={{ padding: '7px 12px', textAlign: 'right' }}>
-                    <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10,
-                      fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace',
-                      background: t.negBg, color: t.negText,
-                      border: `1px solid ${t.negBorder}` }}>
-                      0
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ padding: '8px 12px', borderTop: `1px solid ${t.border}`,
-          fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>
-          Av-In &gt; 0 = barang sempat masuk tapi Av-Out 0, cek rotasi stok ·
-          Av-In = 0 = barang tidak pernah masuk outlet ini
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Constants ────────────────────────────────────────────────────────────────
 const EMPTY_DATA: DistData = {
   summary: {
@@ -1567,11 +857,12 @@ const EMPTY_DATA: DistData = {
   achievementAreaSalesman:   [],
   achievementAreaProduct:    [],
   achievementAreaOutletType: [],
-  missDistribusi:            [],
-  summaryPrevWeek:           undefined,
+  achievementSalesmanProduct: [],
 };
 
 const WEEKS_ARR = Array.from({ length: 52 }, (_, i) => i + 1);
+const TAB_BAR_H = 42;
+const SUB_TAB_H = 38;
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function DistributionSection({
@@ -1601,10 +892,68 @@ export default function DistributionSection({
   const [outletTypeFilter, setOutletTypeFilter] = useState('');
   const [salesmanFilter,   setSalesmanFilter]   = useState('');
 
+  // ── Snapshot filter yang TERAKHIR SUKSES di-fetch (minggu + dropdown).
+  //    Dipakai untuk menghitung "unapplied": filter di layar sudah diubah
+  //    tapi belum ditekan "Terapkan", sehingga data yang tampil belum sesuai.
+  const [appliedFilters, setAppliedFilters] = useState({
+    weekStart: weekStartProp,
+    weekEnd:   weekEndProp,
+    product:   '',
+    outletType:'',
+    salesman:  '',
+  });
+
+  const unapplied = loaded && (
+    weekStart         !== appliedFilters.weekStart  ||
+    weekEnd           !== appliedFilters.weekEnd    ||
+    productFilter      !== appliedFilters.product    ||
+    outletTypeFilter   !== appliedFilters.outletType ||
+    salesmanFilter      !== appliedFilters.salesman
+  );
+
+  // Dot animasi "mengambil data" saat loading (sinkron dengan filter bar utama)
+  const [dotStep, setDotStep] = useState(0);
+  useEffect(() => {
+    if (loading) {
+      const id = setInterval(() => setDotStep(s => (s + 1) % 3), 400);
+      return () => clearInterval(id);
+    }
+  }, [loading]);
+
+  // Dropdown filter (product/outletType/salesman/city) tidak dari cachedData
+  // saja — kita simpan pilihan opsi dari load PERTAMA (tanpa filter) supaya
+  // opsi dropdown tidak menyusut begitu salah satu filter lain aktif.
+  const [productOptions,    setProductOptions]    = useState<string[]>([]);
+  const [outletTypeOptions, setOutletTypeOptions] = useState<string[]>([]);
+  const [salesmanOptions,   setSalesmanOptions]   = useState<string[]>([]);
+
+  // FIX: dulu isInitialLoad dihitung dari `!loaded` (prop dari PARENT).
+  // Masalahnya `loaded` itu state punya page.tsx, bukan state lokal komponen
+  // ini — kalau parent sudah punya loaded=true duluan (misal karena pindah
+  // tab lalu balik lagi, atau area yang sama sudah pernah dimuat di sesi
+  // yang sama), klik "Terapkan" PERTAMA di komponen ini langsung dianggap
+  // "bukan initial load", sehingga productOptions/outletTypeOptions/
+  // salesmanOptions TIDAK PERNAH diisi sama sekali -> dropdown filter tidak
+  // pernah muncul. Sekarang dipakai flag LOKAL (optionsReadyRef) yang murni
+  // menandai "apakah komponen ini sendiri sudah pernah berhasil mengisi
+  // opsi dropdown", lepas dari state `loaded` milik parent.
+  const optionsReadyRef = useRef(false);
+
+  // Ref untuk mencegah race condition: kalau user ganti filter dengan cepat,
+  // hanya response fetch TERAKHIR yang boleh commit ke state.
+  const requestSeq = useRef(0);
+
   useEffect(() => {
     setProductFilter('');
     setOutletTypeFilter('');
     setSalesmanFilter('');
+    setProductOptions([]);
+    setOutletTypeOptions([]);
+    setSalesmanOptions([]);
+    optionsReadyRef.current = false; // area ganti -> opsi dropdown harus di-fetch ulang
+    // reset snapshot juga supaya indikator "Belum diterapkan" tidak salah nyala
+    setAppliedFilters({ weekStart, weekEnd, product: '', outletType: '', salesman: '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areaFilter]);
 
   const resetFilters = useCallback(() => {
@@ -1613,157 +962,169 @@ export default function DistributionSection({
     setSalesmanFilter('');
   }, []);
 
-  const productOptions = useMemo(() => {
-    if (!cachedData) return [];
-    return Array.from(
-      new Set(cachedData.achievementProduct.map(r => r.product).filter(Boolean))
-    ).sort() as string[];
-  }, [cachedData]);
+  const normalizeResponse = (raw: any): DistData => {
+    raw.summary = {
+      ...raw.summary,
+      total_plan:          parseFloat(raw.summary.total_plan          ?? 0),
+      total_actual:        parseFloat(raw.summary.total_actual        ?? 0),
+      total_av_in:         parseFloat(raw.summary.total_av_in         ?? 0),
+      total_ec:            parseFloat(raw.summary.total_ec            ?? 0),
+      total_av_out:        parseFloat(raw.summary.total_av_out        ?? 0),
+      total_outlets:       parseFloat(raw.summary.total_outlets       ?? 0),
+      total_salesmen:      parseFloat(raw.summary.total_salesmen      ?? 0),
+      total_products:      parseFloat(raw.summary.total_products      ?? 0),
+      total_customers:     parseFloat(raw.summary.total_customers     ?? 0),
+      overall_achievement: parseFloat(raw.summary.overall_achievement ?? 0),
+    };
+    raw.achievementSalesman = normRows(raw.achievementSalesman);
+    raw.achievementProduct  = normRows(raw.achievementProduct);
+    raw.achievementArea     = normRows(raw.achievementArea);
+    raw.coverage            = normRows(raw.coverage);
+    raw.coverageSalesman    = raw.coverageSalesman.map((r: any) => ({
+      ...r,
+      plan:            parseFloat(r.plan            ?? 0),
+      actual:          parseFloat(r.actual          ?? 0),
+      av_in:           parseFloat(r.av_in           ?? 0),
+      ec:              parseFloat(r.ec              ?? 0),
+      av_out:          parseFloat(r.av_out          ?? 0),
+      achievement_pct: parseFloat(r.achievement_pct ?? 0),
+    }));
+    raw.achievementAreaProduct = (raw.achievementAreaProduct ?? []).map((r: any) => ({
+      ...r,
+      total_plan:      parseFloat(r.total_plan      ?? 0),
+      total_actual:    parseFloat(r.total_actual    ?? 0),
+      total_av_out:    parseFloat(r.total_av_out    ?? 0),
+      achievement_pct: parseFloat(r.achievement_pct ?? 0),
+      outlet_count:    parseInt(r.outlet_count      ?? 0),
+    }));
+    raw.achievementAreaOutletType = (raw.achievementAreaOutletType ?? []).map((r: any) => ({
+      ...r,
+      total_plan:      parseFloat(r.total_plan      ?? 0),
+      total_actual:    parseFloat(r.total_actual    ?? 0),
+      total_av_out:    parseFloat(r.total_av_out    ?? 0),
+      achievement_pct: parseFloat(r.achievement_pct ?? 0),
+      outlet_count:    parseInt(r.outlet_count      ?? 0),
+    }));
+    raw.trend = raw.trend.map((r: any) => ({
+      ...r,
+      total_plan:    parseFloat(r.total_plan    ?? 0),
+      total_actual:  parseFloat(r.total_actual  ?? 0),
+      total_av_in:   parseFloat(r.total_av_in   ?? 0),
+      total_ec:      parseFloat(r.total_ec      ?? 0),
+      total_av_out:  parseFloat(r.total_av_out  ?? 0),
+      outlet_count:  parseFloat(r.outlet_count  ?? 0),
+    }));
+    raw.outletCountByType = (raw.outletCountByType ?? []).map((r: any) => ({
+      outlet_type:  r.outlet_type,
+      outlet_count: parseInt(r.outlet_count ?? 0),
+    }));
+    raw.totalOutlets = parseInt(raw.totalOutlets ?? 0);
+    raw.achievementAreaSalesman = (raw.achievementAreaSalesman ?? []).map((r: any) => ({
+      ...r,
+      total_plan:      parseFloat(r.total_plan      ?? 0),
+      total_actual:    parseFloat(r.total_actual    ?? 0),
+      total_av_out:    parseFloat(r.total_av_out    ?? 0),
+      achievement_pct: parseFloat(r.achievement_pct ?? 0),
+      outlet_count:    parseInt(r.outlet_count      ?? 0),
+    }));
+    raw.outletCountByTypeSalesman = (raw.outletCountByTypeSalesman ?? []).map((r: any) => ({
+      salesman:     r.salesman,
+      outlet_type:  r.outlet_type,
+      outlet_count: parseInt(r.outlet_count ?? 0),
+    }));
+    raw.achievementSalesmanProduct = (raw.achievementSalesmanProduct ?? []).map((r: any) => ({
+      ...r,
+      total_plan:      parseFloat(r.total_plan      ?? 0),
+      total_actual:    parseFloat(r.total_actual    ?? 0),
+      total_av_in:     parseFloat(r.total_av_in     ?? 0),
+      total_ec:        parseFloat(r.total_ec        ?? 0),
+      total_av_out:    parseFloat(r.total_av_out    ?? 0),
+      achievement_pct: parseFloat(r.achievement_pct ?? 0),
+      outlet_count:    parseInt(r.outlet_count      ?? 0),
+    }));
+    return raw as DistData;
+  };
 
-  const outletTypeOptions = useMemo(() => {
-    if (!cachedData) return [];
-    return Array.from(
-      new Set(cachedData.outletCountByType.map(r => r.outlet_type).filter(Boolean))
-    ).sort() as string[];
-  }, [cachedData]);
-
-  const salesmanOptions = useMemo(() => {
-    if (!cachedData) return [];
-    return Array.from(
-      new Set(cachedData.achievementSalesman.map(r => r.salesman).filter(Boolean))
-    ).sort() as string[];
-  }, [cachedData]);
-
-  const data = useMemo((): DistData => {
-    const base = cachedData ?? EMPTY_DATA;
-    return reaggregate(base, productFilter, outletTypeFilter, salesmanFilter);
-  }, [cachedData, productFilter, outletTypeFilter, salesmanFilter]);
-
-  const hasAreaFilterWarning = useMemo(() => {
-    const hasFilter  = !!(productFilter || salesmanFilter);
-    const hasSalData = (cachedData?.achievementAreaSalesman?.length ?? 0) > 0;
-    return hasFilter && !hasSalData;
-  }, [productFilter, salesmanFilter, cachedData]);
-
-  const hasActiveFilter = !!(productFilter || outletTypeFilter || salesmanFilter);
-
-  const loadData = useCallback(async () => {
+  // fetchData: satu-satunya jalur ambil data. Selalu request langsung ke
+  // server dengan filter aktif sebagai query param — TIDAK ADA agregasi ulang
+  // di client. `isInitialLoad` menandai fetch pertama (tanpa filter product/
+  // outletType/salesman) supaya opsi dropdown diisi dari situ.
+  const fetchData = useCallback(async (opts: {
+    product?:    string;
+    outletType?: string;
+    salesman?:   string;
+    isInitialLoad?: boolean;
+  } = {}) => {
     if (!areaFilter) return;
+
+    const mySeq = ++requestSeq.current;
     setLoading(true);
     try {
       const p = new URLSearchParams({ weekStart: String(weekStart), weekEnd: String(weekEnd) });
-      if (areaFilter) p.append('area', areaFilter);
+      p.append('area', areaFilter);
+      if (opts.product)    p.append('product', opts.product);
+      if (opts.outletType) p.append('outletType', opts.outletType);
+      if (opts.salesman)   p.append('salesman', opts.salesman);
+
       const r = await fetch(`/api/distribution?${p}`);
-      if (r.ok) {
-        const j = await r.json();
-        if (j.success) {
-          const raw = j.data;
-          raw.summary = {
-            ...raw.summary,
-            total_plan:          parseFloat(raw.summary.total_plan          ?? 0),
-            total_actual:        parseFloat(raw.summary.total_actual        ?? 0),
-            total_av_in:         parseFloat(raw.summary.total_av_in         ?? 0),
-            total_ec:            parseFloat(raw.summary.total_ec            ?? 0),
-            total_av_out:        parseFloat(raw.summary.total_av_out        ?? 0),
-            total_outlets:       parseFloat(raw.summary.total_outlets       ?? 0),
-            total_salesmen:      parseFloat(raw.summary.total_salesmen      ?? 0),
-            total_products:      parseFloat(raw.summary.total_products      ?? 0),
-            total_customers:     parseFloat(raw.summary.total_customers     ?? 0),
-            overall_achievement: parseFloat(raw.summary.overall_achievement ?? 0),
-          };
-          raw.achievementSalesman = normRows(raw.achievementSalesman);
-          raw.achievementProduct  = normRows(raw.achievementProduct);
-          raw.achievementArea     = normRows(raw.achievementArea);
-          raw.coverage            = normRows(raw.coverage);
-          raw.coverageSalesman    = raw.coverageSalesman.map((r: any) => ({
-            ...r,
-            plan:            parseFloat(r.plan            ?? 0),
-            actual:          parseFloat(r.actual          ?? 0),
-            av_in:           parseFloat(r.av_in           ?? 0),
-            ec:              parseFloat(r.ec              ?? 0),
-            av_out:          parseFloat(r.av_out          ?? 0),
-            achievement_pct: parseFloat(r.achievement_pct ?? 0),
-          }));
-          raw.achievementAreaProduct = (raw.achievementAreaProduct ?? []).map((r: any) => ({
-            ...r,
-            total_plan:      parseFloat(r.total_plan      ?? 0),
-            total_actual:    parseFloat(r.total_actual    ?? 0),
-            total_av_out:    parseFloat(r.total_av_out    ?? 0),
-            achievement_pct: parseFloat(r.achievement_pct ?? 0),
-            outlet_count:    parseInt(r.outlet_count      ?? 0),
-          }));
-          raw.achievementAreaOutletType = (raw.achievementAreaOutletType ?? []).map((r: any) => ({
-            ...r,
-            total_plan:      parseFloat(r.total_plan      ?? 0),
-            total_actual:    parseFloat(r.total_actual    ?? 0),
-            total_av_out:    parseFloat(r.total_av_out    ?? 0),
-            achievement_pct: parseFloat(r.achievement_pct ?? 0),
-            outlet_count:    parseInt(r.outlet_count      ?? 0),
-          }));
-          raw.trend = raw.trend.map((r: any) => ({
-            ...r,
-            total_plan:    parseFloat(r.total_plan    ?? 0),
-            total_actual:  parseFloat(r.total_actual  ?? 0),
-            total_av_in:   parseFloat(r.total_av_in   ?? 0),
-            total_ec:      parseFloat(r.total_ec      ?? 0),
-            total_av_out:  parseFloat(r.total_av_out  ?? 0),
-            outlet_count:  parseFloat(r.outlet_count  ?? 0),
-          }));
-          raw.outletCountByType = (raw.outletCountByType ?? []).map((r: any) => ({
-            outlet_type:  r.outlet_type,
-            outlet_count: parseInt(r.outlet_count ?? 0),
-          }));
-          raw.totalOutlets = parseInt(raw.totalOutlets ?? 0);
-          raw.achievementAreaSalesman = (raw.achievementAreaSalesman ?? []).map((r: any) => ({
-            ...r,
-            total_plan:      parseFloat(r.total_plan      ?? 0),
-            total_actual:    parseFloat(r.total_actual    ?? 0),
-            total_av_out:    parseFloat(r.total_av_out    ?? 0),
-            achievement_pct: parseFloat(r.achievement_pct ?? 0),
-            outlet_count:    parseInt(r.outlet_count      ?? 0),
-          }));
-          raw.outletCountByTypeSalesman = (raw.outletCountByTypeSalesman ?? []).map((r: any) => ({
-            salesman:     r.salesman,
-            outlet_type:  r.outlet_type,
-            outlet_count: parseInt(r.outlet_count ?? 0),
-          }));
-          // ── Normalize missDistribusi ───────────────────────────────────────────────
-          raw.missDistribusi = (raw.missDistribusi ?? []).map((r: any) => ({
-            outlet:       r.outlet      ?? '',
-            salesman:     r.salesman    ?? '',
-            city:         r.city        ?? '',
-            district:     r.district    ?? '',
-            outlet_type:  r.outlet_type ?? '',
-            total_actual: parseFloat(r.total_actual ?? 0),
-            total_ec:     parseFloat(r.total_ec     ?? 0),
-            total_av_in:  parseFloat(r.total_av_in  ?? 0),
-            total_av_out: parseFloat(r.total_av_out ?? 0),
-          }));
-          // ── Normalize summaryPrevWeek (jika ada) ───────────────────────────
-          if (raw.summaryPrevWeek) {
-            raw.summaryPrevWeek = {
-              total_plan:          parseFloat(raw.summaryPrevWeek.total_plan          ?? 0),
-              total_actual:        parseFloat(raw.summaryPrevWeek.total_actual        ?? 0),
-              total_av_in:         parseFloat(raw.summaryPrevWeek.total_av_in         ?? 0),
-              total_ec:            parseFloat(raw.summaryPrevWeek.total_ec            ?? 0),
-              total_av_out:        parseFloat(raw.summaryPrevWeek.total_av_out        ?? 0),
-              total_outlets:       parseFloat(raw.summaryPrevWeek.total_outlets       ?? 0),
-              overall_achievement: parseFloat(raw.summaryPrevWeek.overall_achievement ?? 0),
-            };
-          }
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j.success) return;
 
-          resetFilters();
-          onDataLoaded?.(raw);
-        }
+      // Kalau ada fetch lebih baru yang sudah jalan, buang hasil yang telat ini.
+      if (mySeq !== requestSeq.current) return;
+
+      const data = normalizeResponse(j.data);
+
+      if (opts.isInitialLoad) {
+        setProductOptions(
+          Array.from(new Set(data.achievementProduct.map(r => r.product).filter(Boolean))).sort() as string[]
+        );
+        setOutletTypeOptions(
+          Array.from(new Set(data.outletCountByType.map(r => r.outlet_type).filter(Boolean))).sort() as string[]
+        );
+        setSalesmanOptions(
+          Array.from(new Set(data.achievementSalesman.map(r => r.salesman).filter(Boolean))).sort() as string[]
+        );
+        optionsReadyRef.current = true;
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [weekStart, weekEnd, areaFilter, resetFilters]);
 
+      onDataLoaded?.(data);
+      // Snapshot disimpan HANYA setelah fetch sukses → sumber kebenaran untuk
+      // indikator "Belum diterapkan".
+      setAppliedFilters({
+        weekStart, weekEnd,
+        product:    opts.product    ?? '',
+        outletType: opts.outletType ?? '',
+        salesman:   opts.salesman   ?? '',
+      });
+    } finally {
+      if (mySeq === requestSeq.current) setLoading(false);
+    }
+  }, [weekStart, weekEnd, areaFilter, onDataLoaded, setLoading]);
+
+  // Tombol "Terapkan" → SATU-SATUNYA pemicu fetch untuk minggu maupun filter
+  // dropdown (Produk / Tipe Outlet / Salesman). Nilai filter dropdown yang
+  // sedang dipilih langsung dikirim bersamaan di sini — tidak ada lagi
+  // auto-fetch terpisah saat dropdown berubah.
+  //
+  // `isInitialLoad` cuma true di load PERTAMA (saat `loaded` masih false),
+  // supaya opsi dropdown (productOptions dkk) diisi dari situ dan tidak
+  // menyusut/reset tiap kali "Terapkan" ditekan ulang dengan filter aktif.
+  const loadData = useCallback(() => {
+    fetchData({
+      product:       productFilter    || undefined,
+      outletType:    outletTypeFilter || undefined,
+      salesman:      salesmanFilter   || undefined,
+      isInitialLoad: !optionsReadyRef.current,
+    });
+  }, [fetchData, productFilter, outletTypeFilter, salesmanFilter]);
+
+  const data     = cachedData ?? EMPTY_DATA;
   const s        = data.summary;
-  const prev     = data.summaryPrevWeek;
   const areaName = areas.find(a => a.id === areaFilter)?.name;
+
+  const hasActiveFilter = !!(productFilter || outletTypeFilter || salesmanFilter);
 
   const selectStyle = (active: boolean) => ({
     height: 26, padding: '0 6px',
@@ -1787,9 +1148,11 @@ export default function DistributionSection({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: 'IBM Plex Sans,sans-serif' }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fbPulseDot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+      `}</style>
 
-      {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono,monospace' }}>Distribusi</div>
@@ -1857,16 +1220,50 @@ export default function DistributionSection({
             </>
           )}
 
-          <button onClick={loadData} disabled={loading}
-            style={{ height: 26, padding: '0 12px', borderRadius: 5, background: '#1c9706', border: 'none', color: '#fff', fontSize: 10, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 5 }}>
-            {loading && <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />}
-            {loading ? 'Memuat...' : 'Terapkan'}
-          </button>
+          {/* ── Indikator status: dot animasi saat loading, atau "Belum diterapkan" saat filter berubah ── */}
+          {loading ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{
+                    width: 4, height: 4, borderRadius: '50%', background: '#4ade80',
+                    transition: 'opacity 0.2s', opacity: i === dotStep ? 1 : 0.25,
+                  }} />
+                ))}
+              </div>
+              <div style={{
+                fontSize: 9, fontFamily: 'IBM Plex Mono,monospace', color: '#4ade80', letterSpacing: '0.06em',
+                background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)',
+                borderRadius: 3, padding: '0 6px', height: 16, display: 'flex', alignItems: 'center',
+              }}>
+                mengambil data
+              </div>
+            </div>
+          ) : unapplied ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: t.warnBg, border: `1px solid ${t.warnBorder}`,
+              borderRadius: 3, padding: '0 7px', height: 18,
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: t.warnText, animation: 'fbPulseDot 1.3s ease-in-out infinite' }} />
+              <span style={{ fontSize: 9, fontFamily: 'monospace', color: t.warnText, fontWeight: 700, letterSpacing: '0.02em' }}>Belum diterapkan</span>
+            </div>
+          ) : null}
+
+          <div style={{ position: 'relative' }}>
+            <button onClick={loadData} disabled={loading}
+              style={{ height: 26, padding: '0 12px', borderRadius: 5, background: '#1c9706', border: 'none', color: '#fff', fontSize: 10, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 5 }}>
+              {loading && <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />}
+              {loading ? 'Memuat...' : 'Terapkan'}
+            </button>
+            {unapplied && !loading && (
+              <span style={{ position: 'absolute', top: -3, right: -3, width: 7, height: 7, borderRadius: '50%', background: t.warnText, border: `1.5px solid ${t.cardBg}` }} />
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ── Filter aktif banner ── */}
-      {loaded && hasActiveFilter && (
+      {/* {loaded && hasActiveFilter && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
           padding: '6px 12px', borderRadius: 8,
@@ -1874,17 +1271,17 @@ export default function DistributionSection({
           fontSize: 10, fontFamily: 'IBM Plex Mono,monospace', color: t.tabActiveText,
         }}>
           <Activity size={11} />
-          <span style={{ color: t.textSub }}>Filter aktif:</span>
+          <span style={{ color: t.textSub }}>Filter dipilih:</span>
           {productFilter    && <FilterBadge label="Produk"      value={productFilter}    onClear={() => setProductFilter('')}    theme={theme} />}
           {outletTypeFilter && <FilterBadge label="Tipe Outlet" value={outletTypeFilter} onClear={() => setOutletTypeFilter('')} theme={theme} />}
           {salesmanFilter   && <FilterBadge label="Salesman"    value={salesmanFilter}   onClear={() => setSalesmanFilter('')}   theme={theme} />}
           <button onClick={resetFilters} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: 11, padding: '0 4px', fontFamily: 'IBM Plex Mono,monospace' }}>
             Reset Semua
           </button>
+          <span style={{ color: t.textMuted, fontSize: 9 }}>· klik Terapkan untuk memuat</span>
         </div>
-      )}
+      )} */}
 
-      {/* ── Belum dimuat ── */}
       {!loaded && !loading && (
         <div style={{ padding: '32px', textAlign: 'center', background: t.cardBg, border: `1px solid ${t.borderCard}`, borderRadius: 12, color: t.textMuted, fontSize: 12, fontFamily: 'IBM Plex Mono,monospace', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
           <Target size={28} color={t.textFaint} />
@@ -1897,62 +1294,21 @@ export default function DistributionSection({
 
       {loaded && (
         <>
-          {/* ── BARU: Funnel di atas KPI cards ── */}
-          <DistributionFunnel summary={s} theme={theme} />
-
-          {/* ── KPI Cards dengan WoW delta ── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
-            <KpiCard
-              label="Total Plan" value={fmtN(s.total_plan)} sub="Plan distribusi"
-              icon={ClipboardList} color="#3b82f6" theme={theme}
-              wowCurrent={s.total_plan} wowPrev={prev?.total_plan}
-            />
-            <KpiCard
-              label="Total Actual" value={fmtN(s.total_actual)} sub="Aktual distribusi"
-              icon={ClipboardCheck} color="#10b981" theme={theme}
-              wowCurrent={s.total_actual} wowPrev={prev?.total_actual}
-            />
-            <KpiCard
-              label="Total Av-In" value={fmtN(s.total_av_in)} sub="Av-In"
-              icon={Download} color="#3b82f6" theme={theme}
-              wowCurrent={s.total_av_in} wowPrev={prev?.total_av_in}
-            />
-            <KpiCard
-              label="EC" value={fmtN(s.total_ec)} sub="Effective Call"
-              icon={TrendingUp} color="#0d9488" theme={theme}
-              wowCurrent={s.total_ec} wowPrev={prev?.total_ec}
-            />
-            <KpiCard
-              label="Total Av-Out" value={fmtN(s.total_av_out)} sub="Av-Out"
-              icon={CheckCircle} color="#10b981" theme={theme}
-              wowCurrent={s.total_av_out} wowPrev={prev?.total_av_out}
-            />
-            <KpiCard
-              label="Total Outlet" value={fmtN(s.total_outlets)} sub="Outlet terjangkau"
-              icon={Store} color="#3b82f6" theme={theme}
-              wowCurrent={s.total_outlets} wowPrev={prev?.total_outlets}
-            />
-            <KpiCard
-              label="Total Salesman" value={fmtN(s.total_salesmen)} sub="Salesman aktif"
-              icon={Users} color="#8b5cf6" theme={theme}
-            />
-            <KpiCard
-              label="Total Produk" value={fmtN(s.total_products)} sub="terdistribusi"
-              icon={Package} color="#f59e0b" theme={theme}
-            />
-            <KpiCard
-              label="Overall Achievement" value={`${s.overall_achievement.toFixed(1)}%`} sub="Av-Out / Plan"
-              icon={Target} color={achColor(s.overall_achievement)} theme={theme}
-              wowCurrent={s.overall_achievement} wowPrev={prev?.overall_achievement}
-            />
+            <KpiCard label="Total Plan"          value={fmtN(s.total_plan)}                     sub="Plan distribusi"   icon={ClipboardList}  color="#3b82f6" theme={theme} />
+            <KpiCard label="Total Actual"        value={fmtN(s.total_actual)}                   sub="Aktual distribusi" icon={ClipboardCheck} color="#10b981" theme={theme} />
+            <KpiCard label="Total Av-In"         value={fmtN(s.total_av_in)}                    sub="Av-In"             icon={Download}       color="#3b82f6" theme={theme} />
+            <KpiCard label="EC"                  value={fmtN(s.total_ec)}                       sub="Effective Call"    icon={TrendingUp}     color="#0d9488" theme={theme} />
+            <KpiCard label="Total Av-Out"        value={fmtN(s.total_av_out)}                   sub="Av-Out"            icon={CheckCircle}    color="#10b981" theme={theme} />
+            <KpiCard label="Total Outlet"        value={fmtN(s.total_outlets)}                  sub="Outlet terjangkau" icon={Store}          color="#3b82f6" theme={theme} />
+            <KpiCard label="Total Salesman"      value={fmtN(s.total_salesmen)}                 sub="Salesman aktif"    icon={Users}          color="#8b5cf6" theme={theme} />
+            <KpiCard label="Total Produk"        value={fmtN(s.total_products)}                 sub="terdistribusi"     icon={Package}        color="#f59e0b" theme={theme} />
+            <KpiCard label="Overall Achievement" value={`${s.overall_achievement.toFixed(1)}%`} sub="Av-Out / Plan"     icon={Target}         color={achColor(s.overall_achievement)} theme={theme} />
           </div>
 
-          {/* ── Tabs ── */}
           <DistributionTabs
             data={data}
             theme={theme}
-            hasAreaFilterWarning={hasAreaFilterWarning}
-            onReload={loadData}
           />
         </>
       )}

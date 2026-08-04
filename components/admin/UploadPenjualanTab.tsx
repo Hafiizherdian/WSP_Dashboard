@@ -517,8 +517,8 @@ export default function UploadPenjualanTab({ dbStats, uploadedFiles, onRefresh, 
       {/* Stat cards */}
       {isRoot && dbStats && (
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isMobile ? 1 : 2}, 1fr)`, gap: 12, marginBottom: 18 }}>
-          <StatCard label="Total Records Penjualan" value={dbStats.total_records.toLocaleString('id-ID')} cardKey="stat1" icon={Database} trend="up" theme={theme} />
-          <StatCard label="Total Omzet" value={`Rp ${(dbStats.total_omzet / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })}jt`} cardKey="stat2" icon={TrendingUp} sub={`Rp ${dbStats.total_omzet.toLocaleString('id-ID')}`} trend="up" theme={theme} />
+          <StatCard label="Total Records Penjualan" value={dbStats.total_records.toLocaleString('id-ID')} cardKey="stat1" icon={Database} trend="neutral" theme={theme} />
+          <StatCard label="Total Omzet" value={`Rp ${(dbStats.total_omzet / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })}jt`} cardKey="stat2" icon={TrendingUp} sub={`Rp ${dbStats.total_omzet.toLocaleString('id-ID')}`} trend="neutral" theme={theme} />
         </div>
       )}
 
@@ -542,7 +542,7 @@ export default function UploadPenjualanTab({ dbStats, uploadedFiles, onRefresh, 
             onDragLeave={e => { e.preventDefault(); setIsDragging(false); }}
             onDrop={e => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f); }}
             onClick={() => !selectedFile && fileInputRef.current?.click()}
-            style={{ border: `2px dashed ${isDragging ? '#6366f1' : selectedFile ? t.green.border : t.borderInput}`, borderRadius: 10, padding: selectedFile ? '14px' : isMobile ? '24px 14px' : '30px 14px', textAlign: 'center', background: isDragging ? t.dropzoneActive : selectedFile ? t.green.bg : t.inputbg, cursor: selectedFile ? 'default' : 'pointer', transition: 'all 0.2s', marginBottom: 14 }}>
+            style={{ border: `2px dashed ${isDragging ? '#6366f1' : selectedFile ? t.green.border : t.borderInput}`, borderRadius: 10, padding: selectedFile ? '14px' : isMobile ? '24px 14px' : '30px 14px', textAlign: 'center', background: isDragging ? t.dropzoneActive : selectedFile ? t.green.bg : t.inputbg, cursor: selectedFile ? 'default' : 'pointer', transition: 'all 0.2s', marginBottom: 14, height: 260 }}>
             {!selectedFile ? (
               <>
                 <div style={{ width: 44, height: 44, borderRadius: 11, background: isDragging ? 'rgba(99,102,241,0.15)' : t.inputbg, border: `1.5px dashed ${isDragging ? '#6366f1' : t.borderInput}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>

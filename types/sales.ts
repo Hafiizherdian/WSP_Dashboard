@@ -210,6 +210,7 @@ export interface SalesData {
   comparisonWeeks: ComparisonWeeks;
   outletData?: OutletSalesData[];  // Data penjualan per outlet (opsional)
   piutangList?: PiutangRecord[];
+  distributionData?: any;
 }
 
 /**

@@ -7,10 +7,11 @@ import {
   PieChart, Pie, Legend,
 } from 'recharts';
 import {
-  TrendingUp, Users, Package, Store,
-  Target, CheckCircle, Activity,
+  Award, Users, Package, Store,
+  Target, CheckCircle, ChartColumnIncreasing,
   Map as MapIcon, RefreshCw,
-  ClipboardList, ClipboardCheck, Download,
+  ClipboardList, ClipboardCheck, CircleArrowDown, CircleCheck,
+  BookUser,
 } from 'lucide-react';
 import { AreaConfig } from '@/lib/areaConfig';
 
@@ -141,16 +142,6 @@ interface OutletCountByTypeSalesman {
   outlet_type:  string;
   outlet_count: number;
 }
-interface AchAreaSalesmanRow {
-  salesman:        string;
-  city:            string;
-  district:        string;
-  total_plan:      number;
-  total_actual:    number;
-  total_av_out:    number;
-  achievement_pct: number;
-  outlet_count:    number;
-}
 interface Summary {
   total_plan:          number;
   total_actual:        number;
@@ -162,16 +153,6 @@ interface Summary {
   total_products:      number;
   total_customers:     number;
   overall_achievement: number;
-}
-interface AchAreaProductRow {
-  product:         string;
-  city:            string;
-  district:        string;
-  total_plan:      number;
-  total_actual:    number;
-  total_av_out:    number;
-  achievement_pct: number;
-  outlet_count:    number;
 }
 
 interface DistData {
@@ -185,9 +166,6 @@ interface DistData {
   outletCountByType:            OutletCountByType[];
   outletCountByTypeSalesman:    OutletCountByTypeSalesman[];
   totalOutlets:                 number;
-  achievementAreaSalesman:      AchAreaSalesmanRow[];
-  achievementAreaProduct:       AchAreaProductRow[];
-  achievementAreaOutletType:    any[];
   achievementSalesmanProduct:  AchSalesmanProductRow[]; 
 }
 
@@ -233,20 +211,21 @@ function normRows(rows: any[]): any[] {
 // sama di beberapa baris (misal lintas minggu / lintas tipe outlet).
 //
 // Sekarang: fetch ke /api/distribution HANYA terjadi ketika tombol "Terapkan"
-// ditekan (loadData) atau saat areaFilter berganti (reset). Filter dropdown
-// (Produk / Tipe Outlet / Salesman) TIDAK auto-fetch lagi begitu dipilih —
-// nilainya cuma disimpan di state lokal dan baru dikirim ke server saat
-// "Terapkan" ditekan. Ini sengaja dihilangkan (dulu ada useEffect yang watch
-// productFilter/outletTypeFilter/salesmanFilter dan langsung fetch) karena:
-//   1) User experience: filter dropdown ikut nunggu tombol, konsisten dengan
-//      filter minggu yang juga baru jalan pas "Terapkan" ditekan.
-//   2) Bug infinite-loop: fetchData sempat dimasukkan ke dependency array
-//      useEffect tsb. Karena fetchData (useCallback) bergantung pada
-//      onDataLoaded/setLoading dari props, dan kalau parent tidak
-//      me-memoize callback itu, fetchData dapat referensi BARU setiap kali
-//      parent re-render -> useEffect ke-trigger lagi -> fetch lagi -> parent
-//      re-render lagi -> ...berulang terus tanpa henti. Menghapus effect ini
-//      menghilangkan sumber loop tersebut sekaligus.
+// ditekan (loadData) atau saat areaFilter berganti (reset). Filter Produk dan
+// Tipe Outlet TIDAK auto-fetch begitu dipilih — nilainya cuma disimpan di
+// state lokal dan baru dikirim ke server saat "Terapkan" ditekan.
+//
+// FILTER SALESMAN — PERUBAHAN:
+// Salesman TIDAK LAGI dikirim ke server / memicu refetch. Semua tabel yang
+// sudah di-fetch dan relevan untuk filter salesman (achievementSalesman,
+// achievementSalesmanProduct, coverageSalesman) SUDAH granular per-salesman
+// (bukan hasil SUM lintas salesman), jadi memfilternya di client dengan
+// `.filter(r => r.salesman === salesmanFilter)` aman dan tidak butuh
+// agregasi ulang apa pun — beda dari kasus reaggregate() lama di atas.
+// Konsekuensinya: summary (KPI cards), trend chart, dan achievementProduct
+// (view=Produk) TIDAK ikut ter-filter oleh salesman, karena tidak ada
+// versi granular per-salesman dari agregat tersebut di client. Kalau nanti
+// dibutuhkan, itu berarti query granular baru di server.
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function AchBadge({ pct, theme }: { pct: number; theme: Theme }) {
@@ -329,17 +308,20 @@ function FilterBadge({ label, value, onClear, theme }: { label: string; value: s
 function DistributionTabs({
   data,
   theme,
+  salesmanFilter,
 }: {
   data: DistData;
   theme: Theme;
+  salesmanFilter: string;
 }) {
   const t = tk[theme];
   const [tabValue, setTabValue] = useState(0);
 
   const tabs = [
-    { label: 'Achievement',    icon: Target,   color: '#10b981', content: <AchievementContent data={data} theme={theme} /> },
-    { label: 'Trend Mingguan', icon: Activity, color: '#3b82f6', content: <TrendContent       data={data} theme={theme} /> },
-    { label: 'Outlet',         icon: Store,    color: '#f59e0b', content: <CoverageContent    data={data} theme={theme} /> },
+    { label: 'Achievement Salesman x Produk', icon: BookUser,              color: t.tableHeadText, content: <AchievementSalesmanProductContent data={data} theme={theme} salesmanFilter={salesmanFilter} /> },
+    { label: 'Achievement',                   icon: Award,                 color: t.tableHeadText, content: <AchievementContent data={data} theme={theme} salesmanFilter={salesmanFilter} /> },
+    { label: 'Trend Mingguan',                icon: ChartColumnIncreasing, color: t.tableHeadText, content: <TrendContent       data={data} theme={theme} /> },
+    { label: 'Outlet',                        icon: Store,                 color: t.tableHeadText, content: <CoverageContent    data={data} theme={theme} salesmanFilter={salesmanFilter} /> },
   ];
 
   return (
@@ -382,19 +364,123 @@ function DistributionTabs({
   );
 }
 
+// ─── Achievement per Salesman × Produk Content ────────────────────────────────
+function AchievementSalesmanProductContent({
+  data,
+  theme,
+  salesmanFilter,
+}: {
+  data: DistData;
+  theme: Theme;
+  salesmanFilter: string;
+}) {
+  const t = tk[theme];
+
+  const achievementSalesmanProduct = useMemo(
+    () => salesmanFilter
+      ? data.achievementSalesmanProduct.filter(r => r.salesman === salesmanFilter)
+      : data.achievementSalesmanProduct,
+    [data.achievementSalesmanProduct, salesmanFilter]
+  );
+
+  return (
+    <div style={{ background: t.accordionBg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '12px 14px' }}>
+      {/* <div style={{ fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono,monospace', marginBottom: 10 }}>
+        Achievement Salesman x Produk
+      </div> */}
+      {achievementSalesmanProduct.length === 0 ? (
+        <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textMuted, fontSize: 11, fontFamily: 'IBM Plex Mono,monospace' }}>
+          Belum ada data.
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 480 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono,monospace' }}>
+            <thead>
+              <tr>
+                {['Salesman', 'Produk', 'Plan', 'Aktual', 'Av-In', 'EC', 'Av-Out', 'Achievement', 'Outlet'].map((h, i) => (
+                  <th key={i} style={{ padding: '6px 10px', textAlign: i > 1 ? 'right' : 'left', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 20, background: t.tableHeadBg }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                // Data dari server sudah per (salesman, product) — tinggal
+                // dikelompokkan untuk tampilan bergaya pivot (nama salesman
+                // cuma muncul di baris pertama grup).
+                const groups = new Map<string, AchSalesmanProductRow[]>();
+                achievementSalesmanProduct.forEach(r => {
+                  const key = r.salesman || '-';
+                  if (!groups.has(key)) groups.set(key, []);
+                  groups.get(key)!.push(r);
+                });
+
+                const rendered: React.ReactNode[] = [];
+                const entries = Array.from(groups.entries());
+
+                entries.forEach(([salesman, rows]) => {
+                  rows.forEach((r, ri) => {
+                    rendered.push(
+                      <tr key={`${salesman}-${r.product}`}
+                        style={{ background: ri % 2 === 1 ? t.rowAlt : 'transparent' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = t.rowHover)}
+                        onMouseLeave={e => (e.currentTarget.style.background = ri % 2 === 1 ? t.rowAlt : 'transparent')}>
+                        <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: ri === 0 ? 700 : 400, color: ri === 0 ? t.text : t.textSub, whiteSpace: 'nowrap' }}>
+                          {ri === 0 ? salesman : ''}
+                        </td>
+                        <td style={{ padding: '6px 10px', fontSize: 10, color: t.textSub, whiteSpace: 'nowrap' }}>{r.product || '—'}</td>
+                        <td style={{ padding: '6px 10px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
+                        <td style={{ padding: '6px 10px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
+                        <td style={{ padding: '6px 10px', fontSize: 10, color: '#3b82f6', textAlign: 'right' }}>{fmtN(r.total_av_in)}</td>
+                        <td style={{ padding: '6px 10px', fontSize: 10, color: '#10b981', textAlign: 'right' }}>{fmtN(r.total_ec)}</td>
+                        <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right' }}><PBar pct={r.achievement_pct} theme={theme} /></td>
+                        <td style={{ padding: '6px 10px', fontSize: 10, color: t.textSub, textAlign: 'right' }}>
+                          {(r.outlet_count ?? 0) > 0 ? fmtN(r.outlet_count) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  });
+                });
+
+                return rendered;
+              })()}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Achievement Content ──────────────────────────────────────────────────────
 function AchievementContent({
   data,
   theme,
+  salesmanFilter,
 }: {
   data: DistData;
   theme: Theme;
+  salesmanFilter: string;
 }) {
   const t  = tk[theme];
   const ts = { fontSize: 8, fill: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' };
   const [view, setView] = useState<'salesman' | 'product' | 'area'>('salesman');
 
-  const rows = view === 'salesman' ? data.achievementSalesman
+  // achievementSalesman & achievementSalesmanProduct sudah granular per
+  // salesman (bukan agregat lintas salesman), jadi aman difilter di client
+  // tanpa refetch dan tanpa risiko salah hitung outlet.
+  const achievementSalesman = useMemo(
+    () => salesmanFilter
+      ? data.achievementSalesman.filter(r => r.salesman === salesmanFilter)
+      : data.achievementSalesman,
+    [data.achievementSalesman, salesmanFilter]
+  );
+
+  // achievementProduct (view=Produk) TIDAK punya breakdown per-salesman dari
+  // server, jadi TIDAK ikut ter-filter oleh salesmanFilter di sini.
+  const rows = view === 'salesman' ? achievementSalesman
              : view === 'product'  ? data.achievementProduct
              : data.achievementArea;
 
@@ -424,94 +510,6 @@ function AchievementContent({
             </button>
           ))}
         </div>
-      </div>
-
-      <div style={{ background: t.accordionBg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '12px 14px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono,monospace', marginBottom: 10 }}>
-          Achievement per Salesman × Produk
-        </div>
-        {data.achievementSalesmanProduct.length === 0 ? (
-          <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textMuted, fontSize: 11, fontFamily: 'IBM Plex Mono,monospace' }}>
-            Belum ada data.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 480 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono,monospace' }}>
-              <thead>
-                <tr>
-                  {['Salesman', 'Produk', 'Plan', 'Aktual', 'Av-In', 'EC', 'Av-Out', 'Achievement', 'Outlet'].map((h, i) => (
-                    <th key={i} style={{ padding: '6px 10px', textAlign: i > 1 ? 'right' : 'left', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 20, background: t.tableHeadBg }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  // Data dari server sudah per (salesman, product) — tinggal
-                  // dikelompokkan untuk tampilan bergaya pivot (nama salesman
-                  // cuma muncul di baris pertama grup + baris Total di akhir).
-                  const groups = new Map<string, AchSalesmanProductRow[]>();
-                  data.achievementSalesmanProduct.forEach(r => {
-                    const key = r.salesman || '-';
-                    if (!groups.has(key)) groups.set(key, []);
-                    groups.get(key)!.push(r);
-                  });
-
-                  const rendered: React.ReactNode[] = [];
-                  const entries = Array.from(groups.entries());
-
-                  entries.forEach(([salesman, rows], gi) => {
-                    const totalPlan   = rows.reduce((s, r) => s + r.total_plan,   0);
-                    const totalActual = rows.reduce((s, r) => s + r.total_actual, 0);
-                    const totalAvIn   = rows.reduce((s, r) => s + r.total_av_in,  0);
-                    const totalEc     = rows.reduce((s, r) => s + r.total_ec,     0);
-                    const totalAvOut  = rows.reduce((s, r) => s + r.total_av_out, 0);
-                    const totalPct    = totalPlan > 0 ? (totalAvOut / totalPlan) * 100 : 0;
-
-                    rows.forEach((r, ri) => {
-                      rendered.push(
-                        <tr key={`${salesman}-${r.product}`}
-                          style={{ background: ri % 2 === 1 ? t.rowAlt : 'transparent' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = t.rowHover)}
-                          onMouseLeave={e => (e.currentTarget.style.background = ri % 2 === 1 ? t.rowAlt : 'transparent')}>
-                          <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: ri === 0 ? 700 : 400, color: ri === 0 ? t.text : t.textSub, whiteSpace: 'nowrap' }}>
-                            {ri === 0 ? salesman : ''}
-                          </td>
-                          <td style={{ padding: '6px 10px', fontSize: 10, color: t.textSub, whiteSpace: 'nowrap' }}>{r.product || '—'}</td>
-                          <td style={{ padding: '6px 10px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
-                          <td style={{ padding: '6px 10px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
-                          <td style={{ padding: '6px 10px', fontSize: 10, color: '#3b82f6', textAlign: 'right' }}>{fmtN(r.total_av_in)}</td>
-                          <td style={{ padding: '6px 10px', fontSize: 10, color: '#10b981', textAlign: 'right' }}>{fmtN(r.total_ec)}</td>
-                          <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
-                          <td style={{ padding: '6px 10px', textAlign: 'right' }}><PBar pct={r.achievement_pct} theme={theme} /></td>
-                          <td style={{ padding: '6px 10px', fontSize: 10, color: t.textSub, textAlign: 'right' }}>
-                            {(r.outlet_count ?? 0) > 0 ? fmtN(r.outlet_count) : '—'}
-                          </td>
-                        </tr>
-                      );
-                    });
-
-                    rendered.push(
-                      // <tr key={`${salesman}-total`} style={{ background: t.tableHeadBg, borderTop: `1px solid ${t.border}`, borderBottom: gi < entries.length - 1 ? `2px solid ${t.border}` : 'none' }}>
-                      //   <td colSpan={2} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.text }}>{salesman} Total</td>
-                      //   <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.textSub, textAlign: 'right' }}>{fmtN(totalPlan)}</td>
-                      //   <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.textSub, textAlign: 'right' }}>{fmtN(totalActual)}</td>
-                      //   <td style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, color: '#3b82f6', textAlign: 'right' }}>{fmtN(totalAvIn)}</td>
-                      //   <td style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, color: '#10b981', textAlign: 'right' }}>{fmtN(totalEc)}</td>
-                      //   <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(totalAvOut)}</td>
-                      //   <td style={{ padding: '6px 10px', textAlign: 'right' }}><AchBadge pct={totalPct} theme={theme} /></td>
-                      //   <td style={{ padding: '6px 10px' }} />
-                      // </tr>
-                    );
-                  });
-
-                  return rendered;
-                })()}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
       <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
@@ -677,24 +675,36 @@ function TrendContent({ data, theme }: { data: DistData; theme: Theme }) {
 function CoverageContent({
   data,
   theme,
+  salesmanFilter,
 }: {
   data: DistData;
   theme: Theme;
+  salesmanFilter: string;
 }) {
   const t   = tk[theme];
   const ts  = { fontSize: 8, fill: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' };
   const cov = data.coverage;
 
-  const salesmen = Array.from(new Set(data.coverageSalesman.map(r => r.salesman)));
-  const weeks    = Array.from(new Set(data.coverageSalesman.map(r => r.week))).sort((a, b) =>
+  // coverageSalesman sudah granular per (salesman, week) — aman difilter di
+  // client tanpa refetch. Pie/bar chart (data.coverage) TIDAK per-salesman
+  // dari server, jadi tetap menampilkan total semua salesman.
+  const coverageSalesman = useMemo(
+    () => salesmanFilter
+      ? data.coverageSalesman.filter(r => r.salesman === salesmanFilter)
+      : data.coverageSalesman,
+    [data.coverageSalesman, salesmanFilter]
+  );
+
+  const salesmen = Array.from(new Set(coverageSalesman.map(r => r.salesman)));
+  const weeks    = Array.from(new Set(coverageSalesman.map(r => r.week))).sort((a, b) =>
     parseInt(a.replace(/\D/g, '')) - parseInt(b.replace(/\D/g, ''))
   );
 
   const heatMap = useMemo(() => {
     const m = new Map<string, CovSalRow>();
-    data.coverageSalesman.forEach(r => m.set(`${r.salesman}||${r.week}`, r));
+    coverageSalesman.forEach(r => m.set(`${r.salesman}||${r.week}`, r));
     return m;
-  }, [data.coverageSalesman]);
+  }, [coverageSalesman]);
 
   const pieData = cov.map((r, i) => ({
     name:  r.outlet_type || 'Unknown',
@@ -854,9 +864,6 @@ const EMPTY_DATA: DistData = {
   outletCountByType:         [],
   outletCountByTypeSalesman: [],
   totalOutlets:              0,
-  achievementAreaSalesman:   [],
-  achievementAreaProduct:    [],
-  achievementAreaOutletType: [],
   achievementSalesmanProduct: [],
 };
 
@@ -892,23 +899,21 @@ export default function DistributionSection({
   const [outletTypeFilter, setOutletTypeFilter] = useState('');
   const [salesmanFilter,   setSalesmanFilter]   = useState('');
 
-  // ── Snapshot filter yang TERAKHIR SUKSES di-fetch (minggu + dropdown).
-  //    Dipakai untuk menghitung "unapplied": filter di layar sudah diubah
-  //    tapi belum ditekan "Terapkan", sehingga data yang tampil belum sesuai.
+  // ── Snapshot filter yang TERAKHIR SUKSES di-fetch (minggu + dropdown
+  //    Produk/Tipe Outlet). Salesman TIDAK masuk sini lagi — dia difilter
+  //    di client secara instan, jadi tidak pernah "belum diterapkan".
   const [appliedFilters, setAppliedFilters] = useState({
     weekStart: weekStartProp,
     weekEnd:   weekEndProp,
     product:   '',
     outletType:'',
-    salesman:  '',
   });
 
   const unapplied = loaded && (
     weekStart         !== appliedFilters.weekStart  ||
     weekEnd           !== appliedFilters.weekEnd    ||
     productFilter      !== appliedFilters.product    ||
-    outletTypeFilter   !== appliedFilters.outletType ||
-    salesmanFilter      !== appliedFilters.salesman
+    outletTypeFilter   !== appliedFilters.outletType
   );
 
   // Dot animasi "mengambil data" saat loading (sinkron dengan filter bar utama)
@@ -952,7 +957,7 @@ export default function DistributionSection({
     setSalesmanOptions([]);
     optionsReadyRef.current = false; // area ganti -> opsi dropdown harus di-fetch ulang
     // reset snapshot juga supaya indikator "Belum diterapkan" tidak salah nyala
-    setAppliedFilters({ weekStart, weekEnd, product: '', outletType: '', salesman: '' });
+    setAppliedFilters({ weekStart, weekEnd, product: '', outletType: '' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areaFilter]);
 
@@ -989,22 +994,6 @@ export default function DistributionSection({
       av_out:          parseFloat(r.av_out          ?? 0),
       achievement_pct: parseFloat(r.achievement_pct ?? 0),
     }));
-    raw.achievementAreaProduct = (raw.achievementAreaProduct ?? []).map((r: any) => ({
-      ...r,
-      total_plan:      parseFloat(r.total_plan      ?? 0),
-      total_actual:    parseFloat(r.total_actual    ?? 0),
-      total_av_out:    parseFloat(r.total_av_out    ?? 0),
-      achievement_pct: parseFloat(r.achievement_pct ?? 0),
-      outlet_count:    parseInt(r.outlet_count      ?? 0),
-    }));
-    raw.achievementAreaOutletType = (raw.achievementAreaOutletType ?? []).map((r: any) => ({
-      ...r,
-      total_plan:      parseFloat(r.total_plan      ?? 0),
-      total_actual:    parseFloat(r.total_actual    ?? 0),
-      total_av_out:    parseFloat(r.total_av_out    ?? 0),
-      achievement_pct: parseFloat(r.achievement_pct ?? 0),
-      outlet_count:    parseInt(r.outlet_count      ?? 0),
-    }));
     raw.trend = raw.trend.map((r: any) => ({
       ...r,
       total_plan:    parseFloat(r.total_plan    ?? 0),
@@ -1019,14 +1008,6 @@ export default function DistributionSection({
       outlet_count: parseInt(r.outlet_count ?? 0),
     }));
     raw.totalOutlets = parseInt(raw.totalOutlets ?? 0);
-    raw.achievementAreaSalesman = (raw.achievementAreaSalesman ?? []).map((r: any) => ({
-      ...r,
-      total_plan:      parseFloat(r.total_plan      ?? 0),
-      total_actual:    parseFloat(r.total_actual    ?? 0),
-      total_av_out:    parseFloat(r.total_av_out    ?? 0),
-      achievement_pct: parseFloat(r.achievement_pct ?? 0),
-      outlet_count:    parseInt(r.outlet_count      ?? 0),
-    }));
     raw.outletCountByTypeSalesman = (raw.outletCountByTypeSalesman ?? []).map((r: any) => ({
       salesman:     r.salesman,
       outlet_type:  r.outlet_type,
@@ -1048,11 +1029,14 @@ export default function DistributionSection({
   // fetchData: satu-satunya jalur ambil data. Selalu request langsung ke
   // server dengan filter aktif sebagai query param — TIDAK ADA agregasi ulang
   // di client. `isInitialLoad` menandai fetch pertama (tanpa filter product/
-  // outletType/salesman) supaya opsi dropdown diisi dari situ.
+  // outletType) supaya opsi dropdown diisi dari situ.
+  //
+  // Salesman TIDAK dikirim lagi ke server — dia difilter di client (lihat
+  // AchievementContent & CoverageContent) karena datanya sudah granular
+  // per-salesman di semua tabel yang relevan.
   const fetchData = useCallback(async (opts: {
     product?:    string;
     outletType?: string;
-    salesman?:   string;
     isInitialLoad?: boolean;
   } = {}) => {
     if (!areaFilter) return;
@@ -1064,7 +1048,6 @@ export default function DistributionSection({
       p.append('area', areaFilter);
       if (opts.product)    p.append('product', opts.product);
       if (opts.outletType) p.append('outletType', opts.outletType);
-      if (opts.salesman)   p.append('salesman', opts.salesman);
 
       const r = await fetch(`/api/distribution?${p}`);
       if (!r.ok) return;
@@ -1096,7 +1079,6 @@ export default function DistributionSection({
         weekStart, weekEnd,
         product:    opts.product    ?? '',
         outletType: opts.outletType ?? '',
-        salesman:   opts.salesman   ?? '',
       });
     } finally {
       if (mySeq === requestSeq.current) setLoading(false);
@@ -1104,9 +1086,9 @@ export default function DistributionSection({
   }, [weekStart, weekEnd, areaFilter, onDataLoaded, setLoading]);
 
   // Tombol "Terapkan" → SATU-SATUNYA pemicu fetch untuk minggu maupun filter
-  // dropdown (Produk / Tipe Outlet / Salesman). Nilai filter dropdown yang
-  // sedang dipilih langsung dikirim bersamaan di sini — tidak ada lagi
-  // auto-fetch terpisah saat dropdown berubah.
+  // dropdown Produk / Tipe Outlet. Salesman TIDAK dikirim di sini lagi —
+  // dia sudah aktif secara instan begitu dipilih (lihat salesmanFilter yang
+  // diteruskan langsung ke DistributionTabs di bawah).
   //
   // `isInitialLoad` cuma true di load PERTAMA (saat `loaded` masih false),
   // supaya opsi dropdown (productOptions dkk) diisi dari situ dan tidak
@@ -1115,10 +1097,9 @@ export default function DistributionSection({
     fetchData({
       product:       productFilter    || undefined,
       outletType:    outletTypeFilter || undefined,
-      salesman:      salesmanFilter   || undefined,
       isInitialLoad: !optionsReadyRef.current,
     });
-  }, [fetchData, productFilter, outletTypeFilter, salesmanFilter]);
+  }, [fetchData, productFilter, outletTypeFilter]);
 
   const data     = cachedData ?? EMPTY_DATA;
   const s        = data.summary;
@@ -1217,10 +1198,11 @@ export default function DistributionSection({
               {salesmanFilter && (
                 <button onClick={() => setSalesmanFilter('')} title="Reset filter salesman" style={clearBtnStyle}>×</button>
               )}
+              <span style={{ ...labelStyle, fontSize: 8, opacity: 0.7 }}>(instan)</span>
             </>
           )}
 
-          {/* ── Indikator status: dot animasi saat loading, atau "Belum diterapkan" saat filter berubah ── */}
+          {/* ── Indikator status: dot animasi saat loading, atau "Belum diterapkan" saat filter Produk/Tipe Outlet/Minggu berubah ── */}
           {loading ? (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
@@ -1263,25 +1245,6 @@ export default function DistributionSection({
         </div>
       </div>
 
-      {/* {loaded && hasActiveFilter && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-          padding: '6px 12px', borderRadius: 8,
-          background: t.tabActive, border: `1px solid rgba(28,151,6,0.2)`,
-          fontSize: 10, fontFamily: 'IBM Plex Mono,monospace', color: t.tabActiveText,
-        }}>
-          <Activity size={11} />
-          <span style={{ color: t.textSub }}>Filter dipilih:</span>
-          {productFilter    && <FilterBadge label="Produk"      value={productFilter}    onClear={() => setProductFilter('')}    theme={theme} />}
-          {outletTypeFilter && <FilterBadge label="Tipe Outlet" value={outletTypeFilter} onClear={() => setOutletTypeFilter('')} theme={theme} />}
-          {salesmanFilter   && <FilterBadge label="Salesman"    value={salesmanFilter}   onClear={() => setSalesmanFilter('')}   theme={theme} />}
-          <button onClick={resetFilters} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: t.textMuted, cursor: 'pointer', fontSize: 11, padding: '0 4px', fontFamily: 'IBM Plex Mono,monospace' }}>
-            Reset Semua
-          </button>
-          <span style={{ color: t.textMuted, fontSize: 9 }}>· klik Terapkan untuk memuat</span>
-        </div>
-      )} */}
-
       {!loaded && !loading && (
         <div style={{ padding: '32px', textAlign: 'center', background: t.cardBg, border: `1px solid ${t.borderCard}`, borderRadius: 12, color: t.textMuted, fontSize: 12, fontFamily: 'IBM Plex Mono,monospace', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
           <Target size={28} color={t.textFaint} />
@@ -1295,20 +1258,21 @@ export default function DistributionSection({
       {loaded && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
-            <KpiCard label="Total Plan"          value={fmtN(s.total_plan)}                     sub="Plan distribusi"   icon={ClipboardList}  color="#3b82f6" theme={theme} />
-            <KpiCard label="Total Actual"        value={fmtN(s.total_actual)}                   sub="Aktual distribusi" icon={ClipboardCheck} color="#10b981" theme={theme} />
-            <KpiCard label="Total Av-In"         value={fmtN(s.total_av_in)}                    sub="Av-In"             icon={Download}       color="#3b82f6" theme={theme} />
-            <KpiCard label="EC"                  value={fmtN(s.total_ec)}                       sub="Effective Call"    icon={TrendingUp}     color="#0d9488" theme={theme} />
-            <KpiCard label="Total Av-Out"        value={fmtN(s.total_av_out)}                   sub="Av-Out"            icon={CheckCircle}    color="#10b981" theme={theme} />
-            <KpiCard label="Total Outlet"        value={fmtN(s.total_outlets)}                  sub="Outlet terjangkau" icon={Store}          color="#3b82f6" theme={theme} />
-            <KpiCard label="Total Salesman"      value={fmtN(s.total_salesmen)}                 sub="Salesman aktif"    icon={Users}          color="#8b5cf6" theme={theme} />
-            <KpiCard label="Total Produk"        value={fmtN(s.total_products)}                 sub="terdistribusi"     icon={Package}        color="#f59e0b" theme={theme} />
-            <KpiCard label="Overall Achievement" value={`${s.overall_achievement.toFixed(1)}%`} sub="Av-Out / Plan"     icon={Target}         color={achColor(s.overall_achievement)} theme={theme} />
+            <KpiCard label="Total Plan"          value={fmtN(s.total_plan)}                     sub="Plan distribusi"   icon={ClipboardList}   color="#3b82f6" theme={theme} />
+            <KpiCard label="Total Actual"        value={fmtN(s.total_actual)}                   sub="Aktual distribusi" icon={ClipboardCheck}  color="#10b981" theme={theme} />
+            <KpiCard label="Total Av-In"         value={fmtN(s.total_av_in)}                    sub="Av-In"             icon={CircleArrowDown} color="#3b82f6" theme={theme} />
+            <KpiCard label="EC"                  value={fmtN(s.total_ec)}                       sub="Effective Call"    icon={CircleCheck}     color="#0d9488" theme={theme} />
+            <KpiCard label="Total Av-Out"        value={fmtN(s.total_av_out)}                   sub="Av-Out"            icon={CheckCircle}     color="#10b981" theme={theme} />
+            <KpiCard label="Total Outlet"        value={fmtN(s.total_outlets)}                  sub="Outlet terjangkau" icon={Store}           color="#3b82f6" theme={theme} />
+            <KpiCard label="Total Salesman"      value={fmtN(s.total_salesmen)}                 sub="Salesman aktif"    icon={Users}           color="#8b5cf6" theme={theme} />
+            <KpiCard label="Total Produk"        value={fmtN(s.total_products)}                 sub="terdistribusi"     icon={Package}         color="#f59e0b" theme={theme} />
+            <KpiCard label="Overall Achievement" value={`${s.overall_achievement.toFixed(1)}%`} sub="Av-Out / Plan"     icon={Target}          color={achColor(s.overall_achievement)} theme={theme} />
           </div>
 
           <DistributionTabs
             data={data}
             theme={theme}
+            salesmanFilter={salesmanFilter}
           />
         </>
       )}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSalesData } from '@/lib/databasev2';
 import { withAuth } from '@/lib/auth/session';
+import { getCached, setCached } from '@/lib/salesCache';
 
 export async function GET(request: NextRequest) {
   return withAuth(request, 'view_stats', async (user) => {
@@ -39,28 +40,33 @@ export async function GET(request: NextRequest) {
         // Root dengan area spesifik → validasi tidak diperlukan, langsung pakai
         // Root tanpa area filter   → resolveTargetAreas() di databasev2 akan
         //                            fetch semua area dari DB secara otomatis
-        // Tidak perlu set allowedAreas — biarkan databasev2 yang menangani
       } else if (user.allowed_areas && user.allowed_areas.length > 0) {
         if (filters.area) {
-          // Ada area spesifik dipilih — validasi akses
           if (!user.allowed_areas.includes(filters.area)) {
             return NextResponse.json(
               { success: false, error: 'Anda tidak memiliki akses ke area ini' },
               { status: 403 },
             );
           }
-          // filters.area valid — resolveTargetAreas() akan pakai [filters.area]
         } else {
-          // Tidak pilih area → pakai semua allowed areas milik user
-          // Berlaku untuk: filter sales records DAN target queries
           filters.allowedAreas = user.allowed_areas;
         }
       } else {
-        // User tanpa allowed_areas sama sekali → tidak ada data & target
         filters.allowedAreas = [];
       }
 
+      // Cek cache dulu sebelum sentuh DB.
+      // allowedAreas ikut masuk cache key karena kena RBAC per user —
+      // supaya user dengan allowed_areas beda nggak saling "berbagi" hasil cache.
+      const cacheParams = { ...filters };
+      const cached = getCached(cacheParams);
+      if (cached) {
+        return NextResponse.json({ success: true, data: cached });
+      }
+
       const data = await fetchSalesData(filters);
+
+      setCached(cacheParams, data);
 
       return NextResponse.json({
         success: true,

@@ -38,7 +38,11 @@ export interface OutletSalesData {
   customer_no?: string;
   customer?: string;      // Nama customer
   salesman?: string;      // Nama salesman
-  weeklyDozNet?:  Record<number, number>; 
+  weeklyDozNet?:  Record<number, number>;
+  weeklyUnitsBks?:  Record<number, number>;   // NEW — breakdown mingguan units_bks (nilai asli, bukan hasil kali rasio)
+  weeklyUnitsSlop?: Record<number, number>;   // NEW — breakdown mingguan units_slop
+  weeklyUnitsBal?:  Record<number, number>;   // NEW — breakdown mingguan units_bal
+  weeklyOmzet?:     Record<number, number>;   // NEW — breakdown mingguan omzet
 }
 
 /**

@@ -1237,33 +1237,12 @@ export default function OutletContributionSection({ data, theme: themeProp, sele
 }, [selectedUnit]);
 
   const getWeeklyUnitData = useCallback((r: OutletSalesData) => {
-    const dNet = r.weeklyDozNet ?? {};
-    if (selectedUnit === 'units_bal') {
-      const res: Record<string, number> = {};
-      Object.entries(dNet).forEach(([k, v]) => { res[k] = (v || 0) * 5; });
-      return res;
-    }
-    if (selectedUnit === 'units_slop') {
-      const res: Record<string, number> = {};
-      Object.entries(dNet).forEach(([k, v]) => { res[k] = (v || 0) * 50; });
-      return res;
-    }
-    if (selectedUnit === 'units_bks') {
-      const res: Record<string, number> = {};
-      Object.entries(dNet).forEach(([k, v]) => { res[k] = (v || 0) * 500; });
-      return res;
-    }
-    if (selectedUnit === 'omzet') {
-      const res: Record<string, number> = {};
-      const totalDoz = r.dozNet || 1;
-      const totalOmz = r.omzet || 0;
-      Object.entries(dNet).forEach(([k, v]) => {
-        res[k] = totalDoz > 0 ? ((v || 0) / totalDoz) * totalOmz : 0;
-      });
-      return res;
-    }
-    return dNet as any;
-  }, [selectedUnit]);
+  if (selectedUnit === 'units_bal')  return (r.weeklyUnitsBal  ?? {}) as Record<string, number>;
+  if (selectedUnit === 'units_slop') return (r.weeklyUnitsSlop ?? {}) as Record<string, number>;
+  if (selectedUnit === 'units_bks')  return (r.weeklyUnitsBks  ?? {}) as Record<string, number>;
+  if (selectedUnit === 'omzet')      return (r.weeklyOmzet     ?? {}) as Record<string, number>;
+  return (r.weeklyDozNet ?? {}) as Record<string, number>;
+}, [selectedUnit]);
 
   const raw = data?.outletData ?? [];
 
@@ -1338,18 +1317,36 @@ export default function OutletContributionSection({ data, theme: themeProp, sele
   const totalB = useMemo(() => dataB.reduce((s, r) => s + getUnitValue(r), 0), [dataB, getUnitValue]);
 
   const sharedWeekRange = useMemo(() => {
-    const allWeeks: number[] = [];
-    
-    dataA.forEach(r => { if (r.week != null) allWeeks.push(r.week); });
-    dataB.forEach(r => { if (r.week != null) allWeeks.push(r.week); });
+  const allWeeks: number[] = [];
 
-    if (allWeeks.length === 0) return { min: 1, max: 52 };
+  const collect = (rows: OutletSalesData[]) => {
+    rows.forEach(r => {
+      const wdn = r.weeklyDozNet;
+      const weekKeys = wdn ? Object.keys(wdn) : [];
+      if (weekKeys.length > 0) {
+        // Sumber kebenaran: breakdown mingguan asli (bisa mencakup banyak minggu
+        // walau baris ini sudah diagregasi jadi 1 row per customer+produk)
+        weekKeys.forEach(wkStr => {
+          const wk = Number(wkStr);
+          if (!Number.isNaN(wk)) allWeeks.push(wk);
+        });
+      } else if (r.week != null) {
+        // Fallback kalau baris tidak punya weeklyDozNet sama sekali
+        allWeeks.push(r.week);
+      }
+    });
+  };
 
-    return {
-      min: allWeeks.reduce((prev, curr) => (curr < prev ? curr : prev), allWeeks[0]),
-      max: allWeeks.reduce((prev, curr) => (curr > prev ? curr : prev), allWeeks[0])
-    };
-  }, [dataA, dataB]);
+  collect(dataA);
+  collect(dataB);
+
+  if (allWeeks.length === 0) return { min: 1, max: 52 };
+
+  return {
+    min: allWeeks.reduce((prev, curr) => (curr < prev ? curr : prev), allWeeks[0]),
+    max: allWeeks.reduce((prev, curr) => (curr > prev ? curr : prev), allWeeks[0]),
+  };
+}, [dataA, dataB]);
 
   const hasDropdownFilter = [selOutlet, selCat, selProduct, selCity, selDistrict, selSalesman].some(v => v !== 'all') || !!selCustomerNo;
   const hasFilter = hasDropdownFilter || !!globalSearch;

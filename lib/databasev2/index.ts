@@ -239,13 +239,21 @@ async function processSalesRecords(filters?: FetchFilters): Promise<SalesData> {
           existingOutlet.unitsSlop += slop;
           existingOutlet.unitsBal  += bal;
           existingOutlet.omzet     += omz;
-          existingOutlet.weeklyDozNet[isoWeek] = (existingOutlet.weeklyDozNet[isoWeek] ?? 0) + dos;
+          existingOutlet.weeklyDozNet[isoWeek]    = (existingOutlet.weeklyDozNet[isoWeek]    ?? 0) + dos;
+          existingOutlet.weeklyUnitsBks[isoWeek]  = (existingOutlet.weeklyUnitsBks[isoWeek]  ?? 0) + bks;   // NEW
+          existingOutlet.weeklyUnitsSlop[isoWeek] = (existingOutlet.weeklyUnitsSlop[isoWeek] ?? 0) + slop;  // NEW
+          existingOutlet.weeklyUnitsBal[isoWeek]  = (existingOutlet.weeklyUnitsBal[isoWeek]  ?? 0) + bal;   // NEW
+          existingOutlet.weeklyOmzet[isoWeek]     = (existingOutlet.weeklyOmzet[isoWeek]     ?? 0) + omz;   // NEW
           if (isoWeek < existingOutlet.weekMin) existingOutlet.weekMin = isoWeek;
           if (isoWeek > existingOutlet.weekMax) existingOutlet.weekMax = isoWeek;
         } else {
           outletAggMap.set(outletKey, {
             dozNet: dos, unitsBks: bks, unitsSlop: slop, unitsBal: bal, omzet: omz,
-            weeklyDozNet: { [isoWeek]: dos },
+            weeklyDozNet:    { [isoWeek]: dos },
+            weeklyUnitsBks:  { [isoWeek]: bks },    // NEW
+            weeklyUnitsSlop: { [isoWeek]: slop },   // NEW
+            weeklyUnitsBal:  { [isoWeek]: bal },    // NEW
+            weeklyOmzet:     { [isoWeek]: omz },    // NEW
             city, district, village, salesman, customer_no,
             year: isoYear, outletType, category, product, customer,
             weekMin: isoWeek, weekMax: isoWeek,
@@ -479,6 +487,10 @@ async function processSalesRecords(filters?: FetchFilters): Promise<SalesData> {
       unitsBal:     agg.unitsBal,
       omzet:        agg.omzet,
       weeklyDozNet: agg.weeklyDozNet,
+      weeklyUnitsBks:  agg.weeklyUnitsBks,   // NEW
+      weeklyUnitsSlop: agg.weeklyUnitsSlop,  // NEW
+      weeklyUnitsBal:  agg.weeklyUnitsBal,   // NEW
+      weeklyOmzet:     agg.weeklyOmzet,      // NEW
       city:         agg.city,
       district:     agg.district,
       village:      agg.village,

@@ -27,24 +27,28 @@ export interface UnitAgg {
 }
 
 export interface OutletAgg {
-  dozNet:       number;
-  unitsBks:     number;
-  unitsSlop:    number;
-  unitsBal:     number;
-  omzet:        number;
-  weeklyDozNet: Record<number, number>;
-  city:         string;
-  district:     string;
-  village:      string;
-  salesman:     string;
-  customer_no:  string;
-  year:         number;
-  outletType:   string;
-  category:     string;
-  product:      string;
-  customer:     string;
-  weekMin:      number;
-  weekMax:      number;
+  dozNet:          number;
+  unitsBks:        number;
+  unitsSlop:       number;
+  unitsBal:        number;
+  omzet:           number;
+  weeklyDozNet:    Record<number, number>;
+  weeklyUnitsBks:  Record<number, number>;   // NEW
+  weeklyUnitsSlop: Record<number, number>;   // NEW
+  weeklyUnitsBal:  Record<number, number>;   // NEW
+  weeklyOmzet:     Record<number, number>;   // NEW
+  city:            string;
+  district:        string;
+  village:         string;
+  salesman:        string;
+  customer_no:     string;
+  year:            number;
+  outletType:      string;
+  category:        string;
+  product:         string;
+  customer:        string;
+  weekMin:         number;
+  weekMax:         number;
 }
 
 // ─── Tipe untuk hasil query target (dipakai antara targetQueries.ts &

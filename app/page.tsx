@@ -13,6 +13,7 @@ import DistributionSection from '@/components/DistributionSection';
 import PiutangComponent from '@/components/PiutangSections';
 import { SalesData } from '@/types/sales';
 import { AreaConfig } from '@/lib/areaConfig';
+import { RegionConfig, getAccessibleRegions } from '@/lib/regionConfig';
 import { useAuth, AuthProvider } from '@/lib/auth/AuthContext';
 import { UserRole } from '@/lib/auth/types';
 import { getProductCategory } from '@/lib/productCategories';
@@ -116,8 +117,6 @@ const fmtUF = (v:number) => {
 };
 const fmtRp = (v:number) =>
   v >= 1e9  ? `Rp ${(v/1e9).toFixed(1)}M`
-  // : v >= 1e6 ? `Rp ${(v/1e6).toFixed(1)}jt`
-  // : v >= 1e3 ? `Rp ${(v/1e3).toFixed(0)}rb`
   : `Rp ${Math.round(v)}`;
 
 function getDetailUnitValue(d: any, unit: string, field: 'actual' | 'target'): number {
@@ -364,7 +363,9 @@ function Sel({ value, onChange, options, theme, style }:{ value:string|number; o
 function DesktopFilterBar({
   y1,sY1,wStart1,sWStart1,w1,sW1,
   y2,sY2,wStart2,sWStart2,w2,sW2,
-  af,sAf,areas,onApply,onReset,loading,theme,
+  af,sAf,areas,
+  rf,sRf,regions,canRegional,
+  onApply,onReset,loading,theme,
   sSelectedUnit,
   selectedUnit,
   unapplied,
@@ -376,17 +377,18 @@ function DesktopFilterBar({
   wStart2:number; sWStart2:(v:number)=>void;
   w2:number; sW2:(v:number)=>void;
   af:string; sAf:(v:string)=>void; areas:AreaConfig[];
+  rf:string; sRf:(v:string)=>void; regions:RegionConfig[]; canRegional:boolean;
   selectedUnit:string; sSelectedUnit:(v:string)=>void;
   unapplied:boolean; // ← beda dari snapshot terakhir yang sukses di-fetch (untuk warning)
   onApply:()=>void; onReset:()=>void; loading:boolean; theme:Theme;
 
 }) {
   const t=tk[theme];
-  // "dirty" = beda dari DEFAULT (untuk tombol Reset). FIX: sebelumnya pakai !!selectedUnit
-  // yang selalu true karena default-nya 'units_dos' (bukan string kosong).
-  const dirty = wStart1!==0 || w1!==0 || wStart2!==0 || w2!==0 || !!af || selectedUnit!=='units_dos';
+  // "dirty" = beda dari DEFAULT (untuk tombol Reset).
+  const dirty = wStart1!==0 || w1!==0 || wStart2!==0 || w2!==0 || !!af || !!rf || selectedUnit!=='units_dos';
   const yO=YEARS.map(y=>({value:y,label:String(y)}));
   const aO=[{value:'',label:'Semua Area'},...areas.map(a=>({value:a.id,label:a.name}))];
+  const rO=[{value:'',label:'Semua Regional'},...regions.map(r=>({value:r.id,label:r.name}))];
 
   // weekStart options: hanya tampilkan minggu <= weekEnd (jika weekEnd sudah dipilih)
   const wStartOpts = (end: number) => [
@@ -467,6 +469,15 @@ function DesktopFilterBar({
         <Lbl c="Area"/>
         <Sel value={af} onChange={v=>sAf(String(v))} options={aO} theme={theme} style={{minWidth:106}}/>
 
+        {/* Dropdown Regional — hanya untuk user yang boleh pakai filter regional */}
+        {canRegional && (
+          <>
+            <Sep/>
+            <Lbl c="Regional"/>
+            <Sel value={rf} onChange={v=>sRf(String(v))} options={rO} theme={theme} style={{minWidth:112}}/>
+          </>
+        )}
+
         <Sep/>
 
         {/* Unit selector */}
@@ -536,11 +547,11 @@ function DesktopFilterBar({
 
 // ─── MobileFilterBar ─────────────────────────────────────────────────────────
 function MobileFilterBar({
-  applied, unapplied, areas, onOpen, loading, theme,
+  applied, unapplied, areas, regions, onOpen, loading, theme,
 }:{
-  applied: { y1:number; wStart1:number; w1:number; y2:number; wStart2:number; w2:number; af:string; unit:string };
+  applied: { y1:number; wStart1:number; w1:number; y2:number; wStart2:number; w2:number; af:string; regional:string; unit:string };
   unapplied: boolean;
-  areas:AreaConfig[];
+  areas:AreaConfig[]; regions:RegionConfig[];
   onOpen:()=>void; loading:boolean; theme:Theme;
 }) {
   const t=tk[theme];
@@ -562,6 +573,7 @@ function MobileFilterBar({
     end > 0 ? `W${start > 0 ? start : 1}–W${end}` : 'Semua';
 
   const aName=areas.find(a=>a.id===applied.af)?.name;
+  const rName=regions.find(r=>r.id===applied.regional)?.name;
 
   return (
     <div style={{
@@ -599,6 +611,7 @@ function MobileFilterBar({
         <span style={{fontSize:8,color:t.textFaint,fontFamily:'monospace',flexShrink:0}}>vs</span>
         <Chip v={`${applied.y2} ${rangeLabel(applied.wStart2,applied.w2)}`} ch="green"/>
         {aName&&<Chip v={aName} ch="orange"/>}
+        {rName&&<Chip v={rName} ch="orange"/>}
         {applied.unit!=='units_dos'&&(
           <Chip v={UNIT_OPTIONS.find(o=>o.value===applied.unit)?.label??applied.unit} ch="orange"/>
         )}
@@ -612,7 +625,9 @@ function MobileFilterSheet({
   open,onClose,
   y1,sY1,wStart1,sWStart1,w1,sW1,
   y2,sY2,wStart2,sWStart2,w2,sW2,
-  af,sAf,areas,onApply,onReset,loading,theme,
+  af,sAf,areas,
+  rf,sRf,regions,canRegional,
+  onApply,onReset,loading,theme,
   sSelectedUnit,
   selectedUnit,
   unapplied,
@@ -625,6 +640,7 @@ function MobileFilterSheet({
   wStart2:number; sWStart2:(v:number)=>void;
   w2:number; sW2:(v:number)=>void;
   af:string; sAf:(v:string)=>void; areas:AreaConfig[];
+  rf:string; sRf:(v:string)=>void; regions:RegionConfig[]; canRegional:boolean;
   selectedUnit:string; sSelectedUnit:(v:string)=>void;
   unapplied:boolean;
   onApply:()=>void; onReset:()=>void; loading:boolean; theme:Theme;
@@ -632,9 +648,10 @@ function MobileFilterSheet({
 
   const t=tk[theme];
   // "dirty" = beda dari DEFAULT (untuk tombol Reset) — beda konsep dengan "unapplied"
-  const dirty = wStart1!==0 || w1!==0 || wStart2!==0 || w2!==0 || !!af || selectedUnit!=='units_dos';
+  const dirty = wStart1!==0 || w1!==0 || wStart2!==0 || w2!==0 || !!af || !!rf || selectedUnit!=='units_dos';
   const yO=YEARS.map(y=>({value:y,label:String(y)}));
   const aO=[{value:'',label:'Semua Area'},...areas.map(a=>({value:a.id,label:a.name}))];
+  const rO=[{value:'',label:'Semua Regional'},...regions.map(r=>({value:r.id,label:r.name}))];
 
   const Row=({l,children}:{l:string;children:React.ReactNode})=>(
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',minHeight:38,borderBottom:`1px solid ${t.border}`}}>
@@ -712,6 +729,15 @@ function MobileFilterSheet({
             <Sel value={af} onChange={(v:any)=>sAf(String(v))} options={aO} theme={theme} style={{minWidth:130}}/>
           </Row>
 
+          {canRegional && (
+            <>
+              <div style={{paddingTop:10,fontSize:8,fontWeight:800,color:t.textMuted,fontFamily:'monospace',textTransform:'uppercase',letterSpacing:'0.12em'}}>Regional</div>
+              <Row l="Filter Regional">
+                <Sel value={rf} onChange={(v:any)=>sRf(String(v))} options={rO} theme={theme} style={{minWidth:130}}/>
+              </Row>
+            </>
+          )}
+
           <div style={{paddingTop:10,fontSize:8,fontWeight:800,color:t.textMuted,fontFamily:'monospace',textTransform:'uppercase',letterSpacing:'0.12em'}}>Unit</div>
           <div style={{display:'flex',flexWrap:'wrap',gap:5,padding:'10px 0'}}>
             {UNIT_OPTIONS.map(opt=>{
@@ -767,10 +793,6 @@ function MobileFilterSheet({
 }
 
 // ─── LoadingOverlay ──────────────────────────────────────────────────────────
-// Card loading di tengah area konten, menggantikan indikator titik-titik kecil
-// yang sebelumnya ada di filter bar (desktop & mobile). Gaya visual mengikuti
-// screen loading sesi (SessionGuard): badge logo + ring spinner + progress bar
-// yang mengisi + teks dengan dots berjalan.
 function LoadingOverlay({ theme, targetRef }: { theme: Theme; targetRef: React.RefObject<HTMLDivElement | null> }) {
   const t = tk[theme];
   const [dots, setDots] = useState(0);
@@ -789,7 +811,7 @@ function LoadingOverlay({ theme, targetRef }: { theme: Theme; targetRef: React.R
     };
     update();
     window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true); // capture: nangkep scroll di ancestor manapun
+    window.addEventListener('scroll', update, true);
     const ro = new ResizeObserver(update);
     if (targetRef.current) ro.observe(targetRef.current);
     return () => {
@@ -832,9 +854,9 @@ function LoadingOverlay({ theme, targetRef }: { theme: Theme; targetRef: React.R
           </svg>
           <div style={{
             position:'absolute', inset:9, borderRadius:11,
-            background:'rgba(28,151,6,0.12)', border:'1px solid rgba(28,151,6,0.25)',
+            // background:'rgba(28,151,6,0.12)', border:'1px solid rgba(28,151,6,0.25)',
             display:'flex', alignItems:'center', justifyContent:'center',
-            animation:'lcPulse 2s ease-in-out infinite',
+            animation:'lcPulse 4s ease-in-out infinite',
           }}>
             <img src="/logo-cgkn.png" alt="CGKN" style={{ width:24, height:24, objectFit:'contain' }}/>
           </div>
@@ -1043,11 +1065,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
   const l4wAvg=l4w.l4wAverage; const c1w=l4w.c1wValue; const lPos=c1w>=l4wAvg; const lc=lPos?'#10b981':'#ef4444';
   const lData=l4w.weeklyTrendData?.map((item:any)=>({w:item.week,v:item.value,avg:l4wAvg}))||[];
 
-  // ── Unit-aware outlet/product values ──────────────────────────────────────
-  // Sebelumnya bagian "Outlet Kontribusi" & "Top Produk" selalu pakai r.dozNet
-  // (= units_dos) apa pun unit yang dipilih, karena backend cuma kirim dozNet.
-  // Setelah backend mengirim unitsBks/unitsSlop/unitsBal/omzet juga di outletData,
-  // baca lewat helper ini supaya ikut berubah saat unit diganti.
   const getOutletUnitValue = (r:any): number => {
     if (selectedUnit === 'omzet')      return r.omzet      ?? 0;
     if (selectedUnit === 'units_bks')  return r.unitsBks   ?? 0;
@@ -1238,7 +1255,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
     );
   }
 
-  // ── Desktop layout ──────────────────────────────────────────────────────────
   return (
     <div style={{height:availH,display:'flex',flexDirection:'column',gap:GAP,overflow:'hidden'}}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1.8fr',gap:GAP,height:KPI_H,flexShrink:0}}>
@@ -1313,7 +1329,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
       </div>
 
       <div style={{flex:1,minHeight:0,display:'grid',gridTemplateColumns:bodyGrid,gap:GAP}}>
-        {/* Kolom kiri */}
         <div style={{display:'flex',flexDirection:'column',gap:GAP,minHeight:0,overflow:'hidden'}}>
           <Card theme={theme} accent="#3b82f6" title={`Mingguan — ${pL} vs ${cL}`} icon={<Calendar size={10} color="#3b82f6"/>} color="#3b82f6" sub={`${posW}/${wc.length} minggu positif`} style={{flex:'1 1 0'}}>
             <ResponsiveContainer width="100%" height={cH}>
@@ -1380,7 +1395,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
           </div>
         </div>
 
-        {/* Kolom tengah */}
         <div style={{display:'flex',flexDirection:'column',gap:GAP,minHeight:0,overflow:'hidden'}}>
           <Card theme={theme} accent={isPos?'#10b981':'#ef4444'} title={`YoY — ${pL} vs ${cL}`} icon={<TrendingUp size={10} color={isPos?'#10b981':'#ef4444'}/>} color={isPos?'#10b981':'#ef4444'} sub={`${isPos?'+':''}${gPct.toFixed(1)}% pertumbuhan tahunan`} style={{flex:'1 1 0'}}>
             <ResponsiveContainer width="100%" height={cH}>
@@ -1446,7 +1460,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
           </Card>
         </div>
 
-        {/* Kolom kanan */}
         {!isMobile&&(
           <div style={{display:'flex',flexDirection:'column',gap:GAP,minHeight:0,overflow:'hidden'}}>
             <Card theme={theme} accent="#10b981" title={`Kuartal ${cL} · ${unitLabel}`} icon={<BarChart3 size={10} color="#10b981"/>} color="#10b981" sub={`${hitQ}/${qd.length} hit target`} style={{flex:'1 1 0'}}>
@@ -1517,7 +1530,8 @@ function DashboardInner() {
   const [collapsed,setCol] = useState(false);
   const [sheetOpen,setSheet] = useState(false);
   const {isMobile,isTablet} = useBreakpoint();
-  const {user} = useAuth();
+  const {user, canUseRegionalFilter} = useAuth();
+  const canRegional = canUseRegionalFilter();
 
   const [y1,    sY1]    = useState(2025);
   const [wStart1, sWStart1] = useState(0);
@@ -1526,22 +1540,29 @@ function DashboardInner() {
   const [wStart2, sWStart2] = useState(0);
   const [w2,    sW2]    = useState(0);
   const [af,    sAf]    = useState('');
+  const [rf,    sRf]    = useState(''); // filter regional, mutually exclusive dengan `af`
   const [selectedUnit, setSelectedUnit] = useState('units_dos'); // draft, dikontrol tombol unit
 
-  // ── Snapshot filter yang TERAKHIR SUKSES di-fetch. Dipakai untuk render & untuk
-  //    menghitung "unapplied" (filter sudah diubah tapi belum diterapkan).
+  // Area & regional mutually exclusive: pilih salah satu akan mengosongkan yang lain,
+  // biar backend gak bingung mesti filter berdasarkan mana.
+  const handleAfChange = (v: string) => { sAf(v); if (v) sRf(''); };
+  const handleRfChange = (v: string) => { sRf(v); if (v) sAf(''); };
+
+  // Snapshot filter yang TERAKHIR SUKSES di-fetch. Dipakai untuk render & untuk
+  // menghitung "unapplied" (filter sudah diubah tapi belum diterapkan).
   const [applied, setApplied] = useState({
     y1: 2025, wStart1: 0, w1: 0,
     y2: 2026, wStart2: 0, w2: 0,
-    af: '', unit: 'units_dos',
+    af: '', regional: '', unit: 'units_dos',
   });
 
   const unapplied =
     y1 !== applied.y1 || wStart1 !== applied.wStart1 || w1 !== applied.w1 ||
     y2 !== applied.y2 || wStart2 !== applied.wStart2 || w2 !== applied.w2 ||
-    af !== applied.af || selectedUnit !== applied.unit;
+    af !== applied.af || rf !== applied.regional || selectedUnit !== applied.unit;
 
   const [areas,setAreas]=useState<AreaConfig[]>([]);
+  const [regions,setRegions]=useState<RegionConfig[]>([]);
   const [loading,setLoading]=useState(false);
   const [availH,setAvailH]=useState(600);
   const mainRef=useRef<HTMLDivElement>(null);
@@ -1554,6 +1575,11 @@ function DashboardInner() {
 
   const [data,setData]=useState<SalesData>(EMPTY_DATA);
   const t=tk[theme];
+
+  // Regional yang boleh dilihat user ini (root lihat semua)
+  const accessibleRegions = user
+    ? getAccessibleRegions(regions, user.allowed_areas ?? [], user.role === 'root')
+    : [];
 
   useEffect(()=>{
     try {
@@ -1590,6 +1616,18 @@ function DashboardInner() {
     })();
   },[]);
 
+  useEffect(()=>{
+    if (!canRegional) return; // jangan fetch kalau user gak punya izin, hemat request
+    (async()=>{
+      try {
+        const r=await fetch('/api/regions');
+        if(!r.ok) throw new Error();
+        const j=await r.json();
+        setRegions(j.data?.regions??[]);
+      } catch { setRegions([]); }
+    })();
+  },[canRegional]);
+
   const doApply = async () => {
   setLoading(true);
   try {
@@ -1605,7 +1643,10 @@ function DashboardInner() {
     if (wStart2 > 0) p.append('weekStart2', String(wStart2));
     if (w2 > 0)      p.append('weekEnd2',   String(w2));
 
-    if (af.trim()) p.append('area', af.trim());
+    // Area & regional mutually exclusive — regional diprioritaskan kalau somehow keduanya terisi
+    if (rf.trim())       p.append('regional', rf.trim());
+    else if (af.trim())  p.append('area', af.trim());
+
     if (selectedUnit) p.append('selectedUnit', selectedUnit);
 
     const r = await fetch(`/api/sales-analysis?${p}`);
@@ -1615,7 +1656,7 @@ function DashboardInner() {
       setData(j.data);
       // Snapshot disimpan HANYA setelah fetch sukses → ini sumber kebenaran
       // untuk chip mobile, KPI/chart (selectedUnit di OverviewTab), dan "unapplied".
-      setApplied({ y1, wStart1, w1, y2, wStart2, w2, af, unit: selectedUnit });
+      setApplied({ y1, wStart1, w1, y2, wStart2, w2, af, regional: rf, unit: selectedUnit });
     }
     else console.error('API error:', j.error);
   } catch (e) {
@@ -1628,9 +1669,9 @@ function DashboardInner() {
   const doReset = () => {
     sWStart1(0); sW1(0);
     sWStart2(0); sW2(0);
-    sAf('');
+    sAf(''); sRf('');
     setSelectedUnit('units_dos');
-    setApplied({ y1, wStart1:0, w1:0, y2, wStart2:0, w2:0, af:'', unit:'units_dos' });
+    setApplied({ y1, wStart1:0, w1:0, y2, wStart2:0, w2:0, af:'', regional:'', unit:'units_dos' });
     setData(EMPTY_DATA);
   };
 
@@ -1679,23 +1720,18 @@ function DashboardInner() {
         }}>
           {isMobile&&<MobileHeader theme={theme} setTheme={applyTheme}/>}
 
-          {/* {isRO&&(
-            <div style={{padding:'3px 12px',background:t.warnBg,borderBottom:`1px solid ${t.warnBorder}`,display:'flex',alignItems:'center',gap:5,fontSize:10,color:t.warnText,flexShrink:0}}>
-              <Shield size={10}/> Login sebagai <strong>User</strong> — hanya bisa melihat.
-            </div>
-          )} */}
-
           {isMobile?(
             <>
               <MobileFilterBar
-                applied={applied} unapplied={unapplied} areas={areas}
+                applied={applied} unapplied={unapplied} areas={areas} regions={accessibleRegions}
                 onOpen={()=>setSheet(true)} loading={loading} theme={theme}
               />
                <MobileFilterSheet
                 open={sheetOpen} onClose={()=>setSheet(false)}
                 y1={y1} sY1={sY1} wStart1={wStart1} sWStart1={sWStart1} w1={w1} sW1={sW1}
                 y2={y2} sY2={sY2} wStart2={wStart2} sWStart2={sWStart2} w2={w2} sW2={sW2}
-                af={af} sAf={sAf} areas={areas}
+                af={af} sAf={handleAfChange} areas={areas}
+                rf={rf} sRf={handleRfChange} regions={accessibleRegions} canRegional={canRegional}
                 selectedUnit={selectedUnit} sSelectedUnit={setSelectedUnit}
                 unapplied={unapplied}
                 onApply={doApply} onReset={doReset} loading={loading} theme={theme}
@@ -1706,7 +1742,8 @@ function DashboardInner() {
             <DesktopFilterBar
               y1={y1} sY1={sY1} wStart1={wStart1} sWStart1={sWStart1} w1={w1} sW1={sW1}
               y2={y2} sY2={sY2} wStart2={wStart2} sWStart2={sWStart2} w2={w2} sW2={sW2}
-              af={af} sAf={sAf} areas={areas}
+              af={af} sAf={handleAfChange} areas={areas}
+              rf={rf} sRf={handleRfChange} regions={accessibleRegions} canRegional={canRegional}
               selectedUnit={selectedUnit} sSelectedUnit={setSelectedUnit}
               unapplied={unapplied}
               onApply={doApply} onReset={doReset} loading={loading} theme={theme}

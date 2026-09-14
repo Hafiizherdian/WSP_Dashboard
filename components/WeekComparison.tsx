@@ -13,11 +13,11 @@ import {
 } from 'recharts';
 import { ChevronUpIcon, ChevronDownIcon, Maximize2, X } from 'lucide-react';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Types
 type Theme   = 'dark' | 'light';
 type UnitKey = 'units_dos' | 'units_bal' | 'units_slop' | 'units_bks' | 'omzet';
 
-// ─── Theme tokens ─────────────────────────────────────────────────────────────
+// Theme tokens
 const TK = {
   dark: {
     pageBg: '#080a0f', cardBg: '#111318', headerBg: '#0c0e14',
@@ -55,14 +55,14 @@ const TK = {
   },
 } as const;
 
-// ─── Chart palette ────────────────────────────────────────────────────────────
+// Chart palette
 // Duotone violet + teal — dua warna setara bobotnya, beda dari biru chrome UI.
 const PREV_COLOR = '#2563eb';
 const CURR_COLOR = '#10b981';
 const POS_COLOR  = '#10b981';
 const NEG_COLOR  = '#ef4444';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 function resolveUnitValues(
   detail: WeekComparisonProductDetail,
   unit: string,
@@ -85,7 +85,7 @@ const fmtK = (v: number) => {
 
 const fmtExact = (v: number) => v.toLocaleString('id-ID', { maximumFractionDigits: 2 });
 
-// ── Format Rupiah, dipakai saat unit terpilih adalah Omzet ───────────────────
+// Format Rupiah, dipakai saat unit terpilih adalah Omzet
 const fmtRp = (v: number) => {
   const av = Math.abs(v);
   if (av >= 1e9) return `Rp ${(v / 1e9).toFixed(1)}M`;
@@ -103,7 +103,7 @@ const formatWeekRange = (range?: { start: number; end: number } | null) => {
   return `Week ${range.start}–${range.end}`;
 };
 
-// ─── Responsive hooks ─────────────────────────────────────────────────────────
+// Responsive hooks
 function useBreakpoint() {
   const [width, setWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth : 1024,
@@ -129,7 +129,7 @@ function useWindowSize() {
   return size;
 }
 
-// ─── useViewport hook (zoom + pan, grafik selalu full-width) ──────────────────
+// useViewport hook (zoom + pan, grafik selalu full-width)
 interface ViewportResult {
   visibleCount : number;
   startIndex   : number;
@@ -314,7 +314,7 @@ function useViewport(totalCount: number): ViewportResult {
   };
 }
 
-// ─── ChartViewport ────────────────────────────────────────────────────────────
+// ChartViewport
 type ChartEntry = Record<string, unknown>;
 
 function ChartViewport<T extends ChartEntry>({
@@ -521,7 +521,7 @@ function ChartViewport<T extends ChartEntry>({
   );
 }
 
-// ─── Custom Tooltips ──────────────────────────────────────────────────────────
+// Custom Tooltips
 type LinePayload = { dataKey?: string; value?: number, name?: string};
 
 function TooltipLine({ active, payload, label, theme, fmtValue = fmtK }: {
@@ -564,7 +564,7 @@ function TooltipBar({ active, payload, label, theme }: {
   );
 }
 
-// ─── Summary bar ──────────────────────────────────────────────────────────────
+// Summary bar
 function ChartSummary({ cells, theme }: {
   cells: { label: string; value: string; color?: string }[];
   theme: Theme;
@@ -585,7 +585,7 @@ function ChartSummary({ cells, theme }: {
   );
 }
 
-// ─── Legend components ────────────────────────────────────────────────────────
+// Legend components
 function LegendPill({ color, label, dash, theme }: { color: string; label: string; dash?: boolean; theme: Theme }) {
   const t = TK[theme];
   return (
@@ -609,7 +609,7 @@ function DotLegend({ color, label, theme }: { color: string; label: string; them
   );
 }
 
-// ─── GrowthPill ───────────────────────────────────────────────────────────────
+// GrowthPill
 function GrowthPill({ value }: { value: number | undefined }) {
   const v = value ?? 0; const pos = v >= 0;
   return (
@@ -626,7 +626,7 @@ function GrowthPill({ value }: { value: number | undefined }) {
   );
 }
 
-// ─── SortIcon ─────────────────────────────────────────────────────────────────
+// SortIcon
 function SortIcon({ colKey, sortConfig, theme }: {
   colKey: string;
   sortConfig: { key: string; direction: 'asc' | 'desc' } | null;
@@ -641,7 +641,7 @@ function SortIcon({ colKey, sortConfig, theme }: {
   );
 }
 
-// ─── FilterSelect ─────────────────────────────────────────────────────────────
+// FilterSelect
 function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, children, theme, fullWidth }: {
   label: string; accentColor?: string; value: string | number;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
@@ -658,7 +658,7 @@ function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, childre
   );
 }
 
-// ─── Buttons ──────────────────────────────────────────────────────────────────
+// Buttons
 function ExpandBtn({ onClick, theme, isTable }: { onClick: () => void; theme: Theme; isTable?: boolean }) {
   const t = TK[theme];
   return (
@@ -682,7 +682,7 @@ function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Them
   );
 }
 
-// ─── ChartTableView ───────────────────────────────────────────────────────────
+// ChartTableView
 type ChartRowData = {
   week: string; previousYear: number; currentYear: number;
   variance: number; variancePercentage: number;
@@ -796,7 +796,7 @@ function ChartTableView({
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// Modal
 function ChartModal({ onClose, title, theme, children }: {
   onClose: () => void; title: string; theme: Theme; children: React.ReactNode;
 }) {
@@ -824,7 +824,7 @@ function ChartModal({ onClose, title, theme, children }: {
   );
 }
 
-// ─── Expand target type ───────────────────────────────────────────────────────
+// Expand target type
 type ExpandTarget = { chart: 'line' | 'bar'; mode: 'chart' | 'table' } | null;
 
 interface ResolvedProductRow {
@@ -839,9 +839,8 @@ interface WeekComparisonProps {
   theme?: Theme;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+
 // Main Component
-// ═══════════════════════════════════════════════════════════════════════════════
 export default function WeekComparisonComponent({
   data, comparisonYears, comparisonWeeks, theme: themeProp,
 }: WeekComparisonProps) {
@@ -863,6 +862,7 @@ export default function WeekComparisonComponent({
   const [selectedWeek,     setSelectedWeek]     = useState<number | null>(null);
   const [selectedUnit,     setSelectedUnit]     = useState('units_dos');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedProduct,  setSelectedProduct]  = useState('all')
   const [expandTarget,     setExpandTarget]     = useState<ExpandTarget>(null);
   const [tableView,        setTableView]        = useState({line: false, bar: false,});
   const [sortConfig,       setSortConfig]       = useState<{
@@ -872,7 +872,7 @@ export default function WeekComparisonComponent({
 
   useEffect(() => { setSelectedWeek(null); }, [data.length]);
 
-  // ── Format-aware: saat unit = omzet, pakai format Rupiah; selain itu format angka biasa ──
+  // Format-aware: saat unit = omzet, pakai format Rupiah selain itu format angka biasa
   const isOmzetUnit  = selectedUnit === 'omzet';
   const fmtVal       = isOmzetUnit ? fmtRp      : fmtK;
   const fmtValExact  = isOmzetUnit ? fmtRpExact : fmtExact;
@@ -924,6 +924,22 @@ export default function WeekComparisonComponent({
     return Array.from(s).sort();
   }, [allProductsInData]);
 
+  const availableProducts = useMemo(() => {
+    const s = new Set<string>();
+    allProductsInData.forEach(p => {
+      if (selectedCategory !== 'all' && getProductCategory(p.product) !== selectedCategory) return;
+      s.add(p.product);
+    });
+    return Array.from(s).sort();
+  }, [allProductsInData, selectedCategory]);
+
+  // reset produk kalau kategori berubah dan produk lama sudah tidak ada di daftar
+  useEffect(() => {
+    if (selectedProduct !== 'all' && !availableProducts.includes(selectedProduct)) {
+      setSelectedProduct('all');
+    }
+  }, [availableProducts, selectedProduct]);
+
   const productDetails = useMemo((): ResolvedProductRow[] => {
     if (selectedWeek === null) return allProductsInData;
     const wd = data.find(d => d.week === selectedWeek);
@@ -946,16 +962,16 @@ export default function WeekComparisonComponent({
   }, []);
 
   const sortedProductDetails = useMemo(() => {
-    const rows = selectedCategory !== 'all'
-      ? productDetails.filter(d => getProductCategory(d.product) === selectedCategory)
-      : productDetails;
+    let rows = productDetails;
+    if (selectedCategory !== 'all') rows = rows.filter(d => getProductCategory(d.product) === selectedCategory);
+    if (selectedProduct  !== 'all') rows = rows.filter(d => d.product === selectedProduct);
     if (!sortConfig) return rows;
     return [...rows].sort((a, b) => {
       const av = a[sortConfig.key], bv = b[sortConfig.key];
       const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
       return sortConfig.direction === 'asc' ? cmp : -cmp;
     });
-  }, [productDetails, sortConfig, selectedCategory]);
+  }, [productDetails, sortConfig, selectedCategory, selectedProduct]);
 
   const chartData = useMemo(() => {
     const rows = selectedWeek !== null
@@ -965,10 +981,11 @@ export default function WeekComparisonComponent({
       let prevVal = 0, currVal = 0;
       if (item.details?.length) {
         item.details.forEach(d => {
-          if (selectedCategory !== 'all' && getProductCategory(d.product) !== selectedCategory) return;
-          const { previous, current } = resolveUnitValues(d, selectedUnit);
-          prevVal += previous; currVal += current;
-        });
+        if (selectedCategory !== 'all' && getProductCategory(d.product) !== selectedCategory) return;
+        if (selectedProduct  !== 'all' && d.product !== selectedProduct) return;
+        const { previous, current } = resolveUnitValues(d, selectedUnit);
+        prevVal += previous; currVal += current;
+      });
       } else {
         prevVal = (item as unknown as { previousYear: number }).previousYear ?? 0;
         currVal = (item as unknown as { currentYear:  number }).currentYear  ?? 0;
@@ -979,7 +996,7 @@ export default function WeekComparisonComponent({
         variance, variancePercentage: prevVal > 0 ? (variance / prevVal) * 100 : 0,
       };
     });
-  }, [data, selectedUnit, selectedCategory, selectedWeek]);
+  }, [data, selectedUnit, selectedCategory, selectedProduct, selectedWeek]);
 
   // Heights
   const inlineChartH = isMobile ? 180 : isTablet ? 220 : 250;
@@ -1015,7 +1032,7 @@ export default function WeekComparisonComponent({
     return { avg, avgP, avgN, pos: posRows.length, neg: negRows.length };
   }, [chartData]);
 
-  // ── Render charts ──────────────────────────────────────────────────────────
+  // Render charts
   type CD = typeof chartData;
 
   const renderLineChart = useCallback((h: number, d: CD = chartData) => (
@@ -1134,7 +1151,7 @@ export default function WeekComparisonComponent({
     ? `${expandTarget.chart === 'line' ? 'Tren Penjualan' : 'Varians Mingguan'} — ${expandTarget.mode === 'table' ? 'Tabel Data' : 'Diperbesar'}`
     : '';
 
-  // ── Memoized summary cells ─────────────────────────────────────────────────
+  // Memoized summary cells
   const lineCells = useMemo(() => [
     { label: String(previousYearLabel), value: fmtValExact(lineSummary.totP) },
     { label: String(currentYearLabel),  value: fmtValExact(lineSummary.totC) },
@@ -1151,8 +1168,7 @@ export default function WeekComparisonComponent({
     { label: `Negatif (${barSummary.neg}wk)`, value: fmtPct(barSummary.avgN), color: NEG_COLOR },
   ], [barSummary]);
 
-  // ── JSX ────────────────────────────────────────────────────────────────────
-  return (
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 12 : 20, fontFamily: 'IBM Plex Sans,sans-serif' }}>
 
       {/* Info banner */}
@@ -1170,13 +1186,9 @@ export default function WeekComparisonComponent({
         <span style={{ fontSize: isMobile ? 10 : 11, fontWeight: 700, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase', letterSpacing: '.08em', display: 'block', marginBottom: isMobile ? 8 : 10 }}>
           Filter Data
         </span>
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, auto)', gap: 8, alignItems: 'center', justifyContent: isMobile ? 'stretch' : 'flex-start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, auto)', gap: 8, alignItems: 'center', justifyContent: isMobile ? 'stretch' : 'flex-start' }}>
           <FilterSelect label="Unit" accentColor="#10b981" value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} theme={theme} fullWidth={isMobile}>
             {unitOptions.map(o => <option key={o.value} value={o.value} style={{ background: t.selectBg }}>{o.label}</option>)}
-          </FilterSelect>
-          <FilterSelect label="Kategori" accentColor="#8b5cf6" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} theme={theme} fullWidth={isMobile}>
-            <option value="all" style={{ background: t.selectBg }}>Semua</option>
-            {availableCategories.map(c => <option key={c} value={c} style={{ background: t.selectBg }}>{c}</option>)}
           </FilterSelect>
           <div style={{ gridColumn: isMobile ? '1 / -1' : undefined }}>
             <FilterSelect label="Minggu" accentColor="#3b82f6" value={selectedWeek ?? 'all'} onChange={e => setSelectedWeek(e.target.value === 'all' ? null : Number(e.target.value))} theme={theme} fullWidth={isMobile}>
@@ -1184,6 +1196,14 @@ export default function WeekComparisonComponent({
               {weekOptions.map(w => <option key={w} value={w} style={{ background: t.selectBg }}>Week {w}</option>)}
             </FilterSelect>
           </div>
+          <FilterSelect label="Kategori" accentColor="#8b5cf6" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} theme={theme} fullWidth={isMobile}>
+            <option value="all" style={{ background: t.selectBg }}>Semua Kategori</option>
+            {availableCategories.map(c => <option key={c} value={c} style={{ background: t.selectBg }}>{c}</option>)}
+          </FilterSelect>
+          <FilterSelect label="Brand" accentColor="#ec4899" value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} theme={theme} fullWidth={isMobile}>
+            <option value="all" style={{ background: t.selectBg }}>Semua Brand</option>
+            {availableProducts.map(p => <option key={p} value={p} style={{ background: t.selectBg }}>{p}</option>)}
+          </FilterSelect>
         </div>
       </div>
 

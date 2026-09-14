@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Maximize2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -19,7 +19,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Types
 // Data-nya sekarang murni Actual vs Actual (dua tahun/periode berbeda), BUKAN
 // Target vs Actual. `previous` = periode/tahun pertama, `current` = periode/
 // tahun kedua. Semua unit (termasuk Omzet) selalu punya dua-duanya.
@@ -180,7 +180,7 @@ const makeYFmt = (unit: string) => (v: number) => {
   return `${Math.round(v)} ${suffix}`;
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 function getDetailValue(d: any, unit: string, side: 'previous' | 'current'): number {
   const ud = d[unit] as { previous?: number; current?: number } | undefined;
   if (ud?.[side] !== undefined && ud[side] !== null) return ud[side] as number;
@@ -201,7 +201,7 @@ function comparisonState(previous: number, current: number) {
   return { hasComparison, isNew, pct };
 }
 
-// ─── GrowthBadge ──────────────────────────────────────────────────────────────
+// GrowthBadge
 // Ganti AchieveBadge: dulu "achievement vs target", sekarang "growth YoY".
 function GrowthBadge({ previous, current, theme }: { previous: number; current: number; theme: Theme }) {
   const t = TK[theme];
@@ -220,7 +220,7 @@ function GrowthBadge({ previous, current, theme }: { previous: number; current: 
   );
 }
 
-// ─── ViewToggle ───────────────────────────────────────────────────────────────
+// ViewToggle
 function ViewToggle({ value, onChange, theme }: { value: 'chart' | 'table'; onChange: (v: 'chart' | 'table') => void; theme: Theme }) {
   const t = TK[theme];
   return (
@@ -235,7 +235,7 @@ function ViewToggle({ value, onChange, theme }: { value: 'chart' | 'table'; onCh
   );
 }
 
-// ─── FilterSelect ─────────────────────────────────────────────────────────────
+// FilterSelect
 function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, children, theme }: {
   label: string; accentColor?: string; value: string | number;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
@@ -252,7 +252,7 @@ function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, childre
   );
 }
 
-// ─── ExpandBtn ────────────────────────────────────────────────────────────────
+// ExpandBtn
 function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   const t = TK[theme];
   return (
@@ -262,7 +262,7 @@ function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   );
 }
 
-// ─── TableBtn ─────────────────────────────────────────────────────────────────
+// TableBtn
 function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
   const t = TK[theme];
   return (
@@ -276,7 +276,7 @@ function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Them
   );
 }
 
-// ─── ChartTooltip ─────────────────────────────────────────────────────────────
+// ChartTooltip
 function ChartTooltip({ active, payload, label, labelPrefix, theme, unit, previousLabel, currentLabel }: any) {
   const t = TK[theme as Theme];
   if (!active || !payload?.length) return null;
@@ -308,7 +308,7 @@ function ChartTooltip({ active, payload, label, labelPrefix, theme, unit, previo
   );
 }
 
-// ─── WeeklyYoYDetailView ───────────────────────────────────────────────────────
+// WeeklyYoYDetailView
 function WeeklyYoYDetailView({ data, selectedUnit, theme, card, tdBase, expandModal, previousLabel, currentLabel }: {
   data: QuarterlyYoYData[]; selectedUnit: string; theme: Theme;
   card: (extra?: React.CSSProperties) => React.CSSProperties;
@@ -489,7 +489,7 @@ function WeeklyYoYDetailView({ data, selectedUnit, theme, card, tdBase, expandMo
   );
 }
 
-// ─── MonthlyYoYDetailView ───────────────────────────────────────────────────────
+// MonthlyYoYDetailView
 function MonthlyYoYDetailView({ data, selectedUnit, theme, card, tdBase, expandModal, previousLabel, currentLabel }: {
   data: QuarterlyYoYData[]; selectedUnit: string; theme: Theme;
   card: (extra?: React.CSSProperties) => React.CSSProperties;
@@ -679,7 +679,7 @@ function MonthlyYoYDetailView({ data, selectedUnit, theme, card, tdBase, expandM
   );
 }
 
-// ─── OverviewYoYTableView ───────────────────────────────────────────────────────
+// OverviewYoYTableView
 type OverviewSortKey = 'quarter' | 'previous' | 'current' | 'variance' | 'variancePercentage' | 'percentOfTotal';
 
 function OverviewYoYTableView({ type, data, selectedUnit, theme, previousLabel, currentLabel }: {
@@ -779,7 +779,7 @@ function OverviewYoYTableView({ type, data, selectedUnit, theme, previousLabel, 
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// Main Component
 interface QuarterlyYoYProps {
   data: QuarterlyYoYData[];
   theme?: Theme;
@@ -803,6 +803,7 @@ export default function QuarterlyYoYComponent({
   const setSelectedUnit = onUnitChange ?? setInternalSelectedUnit;
 
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedProduct, setSelectedProduct]   = useState('all');
   const [selectedQuarter, setSelectedQuarter]   = useState('all');
   const [expandedChart, setExpandedChart]       = useState<'bar' | 'pie' | null>(null);
   const [viewMode, setViewMode]                 = useState<'overview' | 'weekly' | 'monthly'>('overview');
@@ -822,6 +823,22 @@ export default function QuarterlyYoYComponent({
     return Array.from(cats).sort();
   }, [data]);
 
+  const availableProducts = useMemo(() => {
+    const prods = new Set<string>();
+    data.forEach(q => q.details?.forEach((d: any) => {
+      if (selectedCategory !== 'all' && d.productCategory !== selectedCategory) return;
+      if (d.product) prods.add(d.product);
+    }));
+    return Array.from(prods).sort();
+  }, [data, selectedCategory]);
+
+  // reset produk kalau kategori berubah dan produk lama sudah tidak ada di daftar
+  useEffect(() => {
+    if (selectedProduct !== 'all' && !availableProducts.includes(selectedProduct)) {
+      setSelectedProduct('all');
+    }
+  }, [availableProducts, selectedProduct]);
+
   const quarterOptions = useMemo(() => Array.from(new Set(data.map(q => q.quarter))).sort(), [data]);
 
   // Rebuild quarter/weekly/monthly berdasar Unit + Kategori + Kuartal terpilih.
@@ -832,9 +849,11 @@ export default function QuarterlyYoYComponent({
     return data
       .filter(q => selectedQuarter === 'all' || q.quarter === selectedQuarter)
       .map(q => {
-        const filteredDetails = selectedCategory === 'all'
-          ? (q.details ?? [])
-          : (q.details ?? []).filter((d: any) => d.productCategory === selectedCategory);
+        const filteredDetails = (q.details ?? []).filter((d: any) => {
+          if (selectedCategory !== 'all' && d.productCategory !== selectedCategory) return false;
+          if (selectedProduct  !== 'all' && d.product !== selectedProduct) return false;
+          return true;
+        });
 
         if (!filteredDetails.length) {
           return {
@@ -913,7 +932,7 @@ export default function QuarterlyYoYComponent({
           weeklyBreakdown: newWeeklyBreakdown, monthlyBreakdown: newMonthlyBreakdown,
         };
       });
-  }, [data, selectedUnit, selectedCategory, selectedQuarter]);
+  }, [data, selectedUnit, selectedCategory, selectedProduct, selectedQuarter]);
 
   const performanceData = filteredData.map(q => ({ quarter: q.quarter, previous: q.previous, current: q.current, growth: q.previous > 0 ? ((q.current - q.previous) / q.previous) * 100 : null }));
   const pieData         = filteredData.map(q => ({ name: q.quarter, value: q.current }));
@@ -976,13 +995,17 @@ export default function QuarterlyYoYComponent({
             <FilterSelect label="Unit" accentColor="#10b981" value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} theme={theme}>
               {UNIT_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ background: t.selectBg }}>{o.label}</option>)}
             </FilterSelect>
-            <FilterSelect label="Kategori" accentColor="#8b5cf6" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} theme={theme}>
-              <option value="all" style={{ background: t.selectBg }}>Semua</option>
-              {availableCategories.map(c => <option key={c} value={c} style={{ background: t.selectBg }}>{c}</option>)}
-            </FilterSelect>
             <FilterSelect label="Kuartal" accentColor="#3b82f6" value={selectedQuarter} onChange={e => setSelectedQuarter(e.target.value)} theme={theme}>
               <option value="all" style={{ background: t.selectBg }}>Semua Kuartal</option>
               {quarterOptions.map(q => <option key={q} value={q} style={{ background: t.selectBg }}>{q}</option>)}
+            </FilterSelect>
+            <FilterSelect label="Kategori" accentColor="#8b5cf6" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} theme={theme}>
+              <option value="all" style={{ background: t.selectBg }}>Semua Kategori</option>
+              {availableCategories.map(c => <option key={c} value={c} style={{ background: t.selectBg }}>{c}</option>)}
+            </FilterSelect>
+            <FilterSelect label="Brand" accentColor="#ec4899" value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} theme={theme}>
+              <option value="all" style={{ background: t.selectBg }}>Semua Brand</option>
+              {availableProducts.map(p => <option key={p} value={p} style={{ background: t.selectBg }}>{p}</option>)}
             </FilterSelect>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {[
@@ -1000,7 +1023,7 @@ export default function QuarterlyYoYComponent({
         </div>
       </div>
 
-      {/* ── Overview ── */}
+      {/* Overview */}
       {viewMode === 'overview' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>

@@ -5,13 +5,14 @@ import React, {
   createContext, useContext, useRef,
 } from 'react';
 import {
-  Upload, Database, Users, Settings, MapPin,
+  Upload, Database, Users, Settings, MapPin, Globe2,
   Sun, Moon, X, ChevronLeft, ChevronRight,
   ShieldAlert, ShieldCheck, Shield, Menu,
   Layers, LogOut, BarChart3, TrendingUp,
 } from 'lucide-react';
 import { UploadedFile, DatabaseStats } from '@/types/database';
 import AreaManagement from '@/components/AreaManagement';
+import RegionManagement from '@/components/RegionManagement';
 import { AuthProvider, useAuth } from '@/lib/auth/AuthContext';
 import UserManagement from '@/components/UserManagement';
 import { ROLE_LABELS, UserRole } from '@/lib/auth/types';
@@ -162,6 +163,7 @@ const NAV_SECTIONS = [
       { id: 'upload-distribusi', label: 'Upload Distribusi', icon: Upload,      accent: '#10b981' },
       { id: 'upload-piutang',    label: 'Upload Piutang',    icon: Upload,      accent: '#940d2c' },
       { id: 'areas',             label: 'Management Area',   icon: MapPin,      accent: '#0d9488' },
+      { id: 'regions',           label: 'Management Regional', icon: Globe2,    accent: '#d97706' },
     ],
   },
   {
@@ -178,6 +180,7 @@ const PERM_MAP: Record<string, string> = {
   'upload-distribusi': 'upload_file',
   'upload-piutang':    'upload_file',
   areas:               'view_areas',
+  regions:             'view_all_areas', // root-only, sama seperti izin lihat semua area
   users:               'manage_users',
   settings:            'view_files',
 };
@@ -187,6 +190,7 @@ const PAGE_META: Record<string, { title: string; subtitle: string; icon: React.C
   'upload-distribusi': { title: 'Upload Distribusi', subtitle: 'File data distribusi (.xlsx)',  icon: Upload,     color: '#10b981' },
   'upload-piutang':    { title: 'Upload Piutang',    subtitle: 'FIle data piutang (.xlsx',      icon: Upload,     color: '#940d2c' },
   areas:               { title: 'Management Area',   subtitle: 'Target DOS per area',           icon: MapPin,     color: '#0d9488' },
+  regions:             { title: 'Management Regional', subtitle: 'Grouping area untuk filter regional', icon: Globe2, color: '#d97706' },
   users:               { title: 'Manajemen User',    subtitle: 'Kelola akun pengguna',          icon: Users,      color: '#a855f7' },
   settings:            { title: 'Pengaturan',        subtitle: 'Akun & konfigurasi',            icon: Settings,   color: '#f59e0b' },
 };
@@ -282,7 +286,6 @@ function SidebarContent({ activeTab, setActiveTab, collapsed, setCollapsed, can,
               {collapsed && <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '4px 10px 8px' }} />}
               {visible.map(item => (
                 <NavItem key={item.id} label={item.label} icon={item.icon} active={activeTab === item.id} collapsed={collapsed}
-                  // badge={item.id === 'upload-penjualan' ? uploadedFiles.length : undefined}
                   accent={item.accent}
                   onClick={() => { setActiveTab(item.id); if (isMobile) onClose(); }} />
               ))}
@@ -460,19 +463,20 @@ function DashboardContent() {
 
         <main style={{
             flex: 1, minHeight: 0,
-            overflow: activeTab === 'users' ? 'hidden' : 'auto',
-            display: activeTab === 'users' ? 'flex' : 'block',
+            overflow: (activeTab === 'users' || activeTab === 'regions') ? 'hidden' : 'auto',
+            display: (activeTab === 'users' || activeTab === 'regions') ? 'flex' : 'block',
             flexDirection: 'column',
-            padding: activeTab === 'users'
+            padding: (activeTab === 'users' || activeTab === 'regions')
               ? (isMobile ? '12px' : '16px 20px')
               : (isMobile ? '14px 12px' : '20px 24px'),
           }}>
-          {activeTab === 'upload-penjualan'  && can('view_files')   && <UploadPenjualanTab  dbStats={dbStats} uploadedFiles={uploadedFiles} onRefresh={fetchData} theme={theme} addToast={addToast} />}
-          {activeTab === 'upload-distribusi' && can('upload_file')  && <UploadDistribusiTab theme={theme} addToast={addToast} distFiles={distFiles} onRefresh={fetchData} dbStats={dbStats} />}
-          {activeTab === 'upload-piutang'    && can('upload_file')  && <UploadPiutangTab    theme={theme} addToast={addToast}/>}
-          {activeTab === 'areas'             && can('view_areas')   && <AreaManagement theme={theme} />}
-          {activeTab === 'users'             && can('manage_users') && <UserManagement theme={theme} />}
-          {activeTab === 'settings'          && can('view_files')   && <SettingsTab theme={theme} addToast={addToast} />}
+          {activeTab === 'upload-penjualan'  && can('view_files')      && <UploadPenjualanTab  dbStats={dbStats} uploadedFiles={uploadedFiles} onRefresh={fetchData} theme={theme} addToast={addToast} />}
+          {activeTab === 'upload-distribusi' && can('upload_file')     && <UploadDistribusiTab theme={theme} addToast={addToast} distFiles={distFiles} onRefresh={fetchData} dbStats={dbStats} />}
+          {activeTab === 'upload-piutang'    && can('upload_file')     && <UploadPiutangTab    theme={theme} addToast={addToast}/>}
+          {activeTab === 'areas'             && can('view_areas')      && <AreaManagement theme={theme} />}
+          {activeTab === 'regions'           && can('view_all_areas')  && <RegionManagement theme={theme} />}
+          {activeTab === 'users'             && can('manage_users')    && <UserManagement theme={theme} />}
+          {activeTab === 'settings'          && can('view_files')      && <SettingsTab theme={theme} addToast={addToast} />}
         </main>
 
         <footer style={{ padding: `8px ${isMobile ? 12 : 20}px`, borderTop: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

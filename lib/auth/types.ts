@@ -8,6 +8,7 @@ export interface SessionUser {
   email:    string;
   role:     UserRole;
   allowed_areas: string[]; // Array of area IDs this user can access
+  can_filter_regional?: boolean; // Izin khusus akses fitur filter regional
 }
 
 export interface JWTPayload extends SessionUser {
@@ -17,28 +18,17 @@ export interface JWTPayload extends SessionUser {
 
 // ─── Permission map ───────────────────────────────────────────────────────────
 export const PERMISSIONS = {
-  // File / data
   upload_file:    ['root', 'admin'],
   delete_file:    ['root', 'admin'],
   view_files:     ['root', 'admin', 'user'],
   preview_file:   ['root', 'admin', 'user'],
-
-  // Stats / dashboard
   view_stats:     ['root', 'admin', 'user'],
-
-  // Area management
   manage_areas:   ['root', 'admin'],
   view_areas:     ['root', 'admin', 'user'],
-
-  // User management
   manage_users:   ['root'],
   view_users:     ['root'],
-
-  // Settings
   run_migration:  ['root'],
   view_settings:  ['root'],
-
-  // Admin panel access
   access_admin_panel: ['root', 'admin'],
   view_all_areas: ['root'],
 } as const satisfies Record<string, UserRole[]>;
@@ -56,13 +46,20 @@ export function canAccessArea(user: SessionUser, areaId: string): boolean {
 }
 
 export function getAccessibleAreas(user: SessionUser): string[] {
-  if (user.role === 'root') return []; // Empty array means all areas
+  if (user.role === 'root') return [];
   return user.allowed_areas;
 }
 
 export function filterUserAreas(user: SessionUser, allAreas: any[]): any[] {
   if (user.role === 'root') return allAreas;
   return allAreas.filter(area => user.allowed_areas.includes(area.id));
+}
+
+// ─── Regional filter access control ────────────────────────────────────
+export function canUseRegionalFilter(user: SessionUser | null | undefined): boolean {
+  if (!user) return false;
+  if (user.role === 'root') return true;
+  return !!user.can_filter_regional;
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {

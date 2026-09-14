@@ -2,7 +2,10 @@
 
 // lib/auth/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { SessionUser, can, Permission, canAccessArea, getAccessibleAreas } from './types';
+import {
+  SessionUser, can, Permission, canAccessArea, getAccessibleAreas,
+  canUseRegionalFilter,
+} from './types';
 
 interface AuthContextValue {
   user:    SessionUser | null;
@@ -11,6 +14,7 @@ interface AuthContextValue {
   can:     (permission: Permission) => boolean;
   canAccessArea: (area: string) => boolean;
   getAccessibleAreas: () => string[];
+  canUseRegionalFilter: () => boolean;
 }
 
 const AuthCtx = createContext<AuthContextValue>({
@@ -19,6 +23,7 @@ const AuthCtx = createContext<AuthContextValue>({
   can: () => false,
   canAccessArea: () => false,
   getAccessibleAreas: () => [],
+  canUseRegionalFilter: () => false,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -50,12 +55,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkAreaAccess = useCallback(
     (area: string) => {
       const hasAccess = user ? canAccessArea(user, area) : false;
-      // console.log('[AuthContext] Area access check:', { 
-      //   user: user?.username, 
-      //   role: user?.role, 
-      //   userAreas: user?.allowed_areas, 
-      //   requestedArea: area, 
-      //   hasAccess 
+      // console.log('[AuthContext] Area access check:', {
+      //   user: user?.username,
+      //   role: user?.role,
+      //   userAreas: user?.allowed_areas,
+      //   requestedArea: area,
+      //   hasAccess
       // });
       return hasAccess;
     },
@@ -67,8 +72,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user]
   );
 
+  const checkRegionalFilter = useCallback(
+    () => canUseRegionalFilter(user),
+    [user]
+  );
+
   return (
-    <AuthCtx.Provider value={{ user, loading, logout, can: checkPerm, canAccessArea: checkAreaAccess, getAccessibleAreas: getAccessible }}>
+    <AuthCtx.Provider value={{
+      user,
+      loading,
+      logout,
+      can: checkPerm,
+      canAccessArea: checkAreaAccess,
+      getAccessibleAreas: getAccessible,
+      canUseRegionalFilter: checkRegionalFilter,
+    }}>
       {children}
     </AuthCtx.Provider>
   );

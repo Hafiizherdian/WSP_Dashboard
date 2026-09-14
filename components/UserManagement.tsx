@@ -6,19 +6,19 @@ import {
   AlertCircle, Shield, ShieldCheck, ShieldAlert,
   ToggleLeft, ToggleRight, KeyRound, Eye, EyeOff,
   Copy, RefreshCw, Mail, Lock, UserCog, History,
-  Monitor, Smartphone,
+  Monitor, Smartphone, Globe2,
 } from 'lucide-react';
 import { UserRole, ROLE_LABELS, SessionUser } from '@/lib/auth/types';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { AreaConfig, defaultAreas } from '@/lib/areaConfig';
 
-// ─── Constants ─────────────────────────────────────────────────────────────────
+// Constants
 const F_SANS  = '"IBM Plex Sans", sans-serif';
 const F_MONO  = '"IBM Plex Mono", monospace';
 const TOAST_MS = 3500;
 const ROLE_ORDER: Record<UserRole, number> = { root: 0, admin: 1, user: 2 };
 
-// ─── Types ──────────────────────────────────────────────────────────────────────
+// Types
 interface AppUser {
   id:              string;
   username:        string;
@@ -29,6 +29,7 @@ interface AppUser {
   last_login:      string | null;
   created_by_name: string | null;
   allowed_areas?:  string[];
+  can_filter_regional?: boolean;
 }
 interface LoginEvent {
   id:         string;
@@ -40,7 +41,7 @@ interface LoginEvent {
 interface ToastItem { id: number; type: 'success' | 'error' | 'warning'; msg: string; }
 type Theme = 'dark' | 'light';
 
-// ─── Design Tokens ──────────────────────────────────────────────────────────────
+// Design Tokens
 interface Tok {
   page: string; card: string; cardAlt: string; modal: string;
   input: string; inputBd: string;
@@ -94,7 +95,7 @@ function tk(theme: Theme): Tok {
   };
 }
 
-// ─── Role Config ────────────────────────────────────────────────────────────────
+// Role Config
 const ROLE_CFG = {
   root:  { icon: ShieldAlert, label: 'Root',  desc: 'Akses penuh semua fitur & area' },
   admin: { icon: ShieldCheck, label: 'Admin', desc: 'Upload file & kelola data area' },
@@ -107,7 +108,6 @@ function roleCss(role: UserRole, t: Tok) {
   return                       { bg: t.greenBg,  tx: t.green,  bd: t.greenBd  };
 }
 
-// ─── CSS ────────────────────────────────────────────────────────────────────────
 const CSS = `
   @keyframes slideUp   { from { opacity:0; transform:translateY(10px) }  to { opacity:1; transform:translateY(0) } }
   @keyframes fadeIn    { from { opacity:0 }                               to { opacity:1 } }
@@ -122,7 +122,7 @@ const CSS = `
   .um-ichk { cursor:pointer; }
 `;
 
-// ─── Atoms ──────────────────────────────────────────────────────────────────────
+// Atoms
 function Spin({ sz = 14 }: { sz?: number }) {
   return (
     <svg style={{ animation: 'spin .65s linear infinite', width: sz, height: sz, flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
@@ -156,6 +156,16 @@ function StatusPill({ active, t }: { active: boolean; t: Tok }) {
   );
 }
 
+function RegionalPill({ active, t }: { active: boolean; t: Tok }) {
+  if (!active) return <span style={{ fontSize: 11, color: t.tx4, fontFamily: F_MONO }}>—</span>;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, fontSize: 10.5, fontWeight: 700, fontFamily: F_MONO, background: t.amberBg, color: t.amber, border: `1px solid ${t.amberBd}`, whiteSpace: 'nowrap' }}>
+      <Globe2 size={9}/>
+      Regional
+    </span>
+  );
+}
+
 function IBtn({ icon: Icon, color, bg, bd, onClick, title, disabled }: {
   icon: React.ElementType; color: string; bg: string; bd: string;
   onClick: () => void; title: string; disabled?: boolean;
@@ -168,7 +178,7 @@ function IBtn({ icon: Icon, color, bg, bd, onClick, title, disabled }: {
   );
 }
 
-// ─── Toast ──────────────────────────────────────────────────────────────────────
+// Toast
 function Toasts({ items, theme, onRemove }: { items: ToastItem[]; theme: Theme; onRemove: (id: number) => void }) {
   const d = theme === 'dark';
   const accents: Record<ToastItem['type'], string> = {
@@ -200,7 +210,7 @@ function Toasts({ items, theme, onRemove }: { items: ToastItem[]; theme: Theme; 
   );
 }
 
-// ─── Field Wrapper ──────────────────────────────────────────────────────────────
+// Field Wrapper
 function Field({ label, error, children, hint }: { label: string; error?: string; children: React.ReactNode; hint?: string }) {
   return (
     <div>
@@ -212,7 +222,7 @@ function Field({ label, error, children, hint }: { label: string; error?: string
   );
 }
 
-// ─── Password Input ─────────────────────────────────────────────────────────────
+// Password Input
 function PwdInput({ value, onChange, placeholder, t, hasError }: {
   value: string; onChange: (v: string) => void; placeholder: string; t: Tok; hasError?: boolean;
 }) {
@@ -228,7 +238,7 @@ function PwdInput({ value, onChange, placeholder, t, hasError }: {
   );
 }
 
-// ─── Reset Password Modal ────────────────────────────────────────────────────────
+// Reset Password Modal
 function ResetPasswordModal({ user, theme, onClose, onReset }: {
   user: AppUser; theme: Theme; onClose: () => void;
   onReset: (userId: string, newPassword: string) => Promise<void>;
@@ -347,7 +357,7 @@ function ResetPasswordModal({ user, theme, onClose, onReset }: {
                 </div>
               </div>
               <div style={{ padding: '10px 12px', borderRadius: 7, background: t.amberBg, border: `1px solid ${t.amberBd}`, fontSize: 11, color: t.amber, lineHeight: 1.6 }}>
-                <strong>⚠️ Penting:</strong> Catat atau salin password ini sekarang. Password tidak akan ditampilkan lagi setelah modal ditutup.
+                <strong> Penting:</strong> Catat atau salin password ini sekarang. Password tidak akan ditampilkan lagi setelah modal ditutup.
               </div>
               <button onClick={onClose} className="um-btn" style={{ padding: '9px', borderRadius: 7, fontSize: 13, fontWeight: 600, background: '#6366f1', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: F_SANS }}>
                 Selesai &amp; Tutup
@@ -360,7 +370,7 @@ function ResetPasswordModal({ user, theme, onClose, onReset }: {
   );
 }
 
-// ─── Login History Modal ─────────────────────────────────────────────────────────
+// Login History Modal
 function LoginHistoryModal({ user, theme, onClose }: {
   user: AppUser; theme: Theme; onClose: () => void;
 }) {
@@ -413,10 +423,8 @@ function LoginHistoryModal({ user, theme, onClose }: {
     >
       <div style={{ background: t.modal, border: `1px solid ${t.lineStrong}`, borderRadius: 12, width: '100%', maxWidth: 620, maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', overflow: 'hidden', animation: 'slideUp 0.18s ease' }}>
 
-        {/* accent bar */}
         <div style={{ height: 3, background: 'linear-gradient(90deg,#0ea5e9,#6366f1)', flexShrink: 0 }}/>
 
-        {/* header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px 14px', borderBottom: `1px solid ${t.line}`, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 34, height: 34, borderRadius: 8, background: t.blueBg, border: `1px solid ${t.blueBd}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -432,7 +440,6 @@ function LoginHistoryModal({ user, theme, onClose }: {
           </button>
         </div>
 
-        {/* stats bar — hanya tampil jika data tersedia */}
         {!loading && !error && logs.length > 0 && (
           <div style={{ display: 'flex', gap: 10, padding: '10px 18px', borderBottom: `1px solid ${t.line}`, flexShrink: 0, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6, background: t.cardAlt, border: `1px solid ${t.line}`, fontSize: 11, fontFamily: F_MONO, color: t.tx2 }}>
@@ -452,7 +459,6 @@ function LoginHistoryModal({ user, theme, onClose }: {
           </div>
         )}
 
-        {/* body */}
         <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 48, color: t.tx3, fontSize: 12 }}>
@@ -491,11 +497,9 @@ function LoginHistoryModal({ user, theme, onClose }: {
                   const rowBg  = idx % 2 === 1 ? t.rowAlt : 'transparent';
                   return (
                     <tr key={log.id} className="um-row" style={{ borderBottom: `1px solid ${t.line}`, transition: 'background 0.08s' }}>
-                      {/* nomor urut */}
                       <td style={{ padding: '9px 14px', background: rowBg, textAlign: 'center' }}>
                         <span style={{ fontSize: 10, color: t.tx4, fontFamily: F_MONO }}>{idx + 1}</span>
                       </td>
-                      {/* waktu */}
                       <td style={{ padding: '9px 14px', background: rowBg, whiteSpace: 'nowrap' }}>
                         <div style={{ fontSize: 11.5, color: t.tx1, fontFamily: F_MONO }}>
                           {new Date(log.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -504,14 +508,12 @@ function LoginHistoryModal({ user, theme, onClose }: {
                           {new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </div>
                       </td>
-                      {/* IP */}
                       <td style={{ padding: '9px 14px', background: rowBg, fontFamily: F_MONO, fontSize: 11.5, color: t.tx2, whiteSpace: 'nowrap' }}>
                         {log.ip_address
                           ? log.ip_address
                           : <span style={{ color: t.tx4 }}>—</span>
                         }
                       </td>
-                      {/* device */}
                       <td style={{ padding: '9px 14px', background: rowBg }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: t.tx2 }}>
                           {dev.mobile
@@ -521,7 +523,6 @@ function LoginHistoryModal({ user, theme, onClose }: {
                           <span style={{ fontFamily: F_SANS }}>{dev.label}</span>
                         </div>
                       </td>
-                      {/* status */}
                       <td style={{ padding: '9px 14px', background: rowBg, textAlign: 'center' }}>
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -544,7 +545,6 @@ function LoginHistoryModal({ user, theme, onClose }: {
           )}
         </div>
 
-        {/* footer */}
         <div style={{ padding: '10px 18px', borderTop: `1px solid ${t.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
           <span style={{ fontSize: 10.5, color: t.tx4, fontFamily: F_MONO, display: 'flex', alignItems: 'center', gap: 5 }}>
             <AlertCircle size={10}/>
@@ -559,13 +559,13 @@ function LoginHistoryModal({ user, theme, onClose }: {
   );
 }
 
-// ─── User Form Modal ─────────────────────────────────────────────────────────────
+// User Form Modal
 interface UserFormProps {
   editing:  AppUser | null;
   theme:    Theme;
   me:       SessionUser | null;
   areas:    AreaConfig[];
-  onSave:   (data: Partial<AppUser> & { password?: string; allowed_areas?: string[] }) => Promise<void>;
+  onSave:   (data: Partial<AppUser> & { password?: string; allowed_areas?: string[]; can_filter_regional?: boolean }) => Promise<void>;
   onCancel: () => void;
 }
 interface FormState {
@@ -575,6 +575,7 @@ interface FormState {
   password:      string;
   password2:     string;
   allowed_areas: string[];
+  can_filter_regional: boolean;
 }
 
 function validateForm(form: FormState, isEditing: boolean): Record<string, string> {
@@ -593,6 +594,7 @@ function UserFormModal({ editing, theme, me, areas, onSave, onCancel }: UserForm
   const t      = tk(theme);
   const d      = theme === 'dark';
   const isEdit = !!editing;
+  const isRootActor = me?.role === 'root'; // hanya root yang boleh atur flag filter regional
 
   const [form, setForm] = useState<FormState>({
     username:      editing?.username      ?? '',
@@ -601,6 +603,7 @@ function UserFormModal({ editing, theme, me, areas, onSave, onCancel }: UserForm
     password:      '',
     password2:     '',
     allowed_areas: editing?.allowed_areas ?? [],
+    can_filter_regional: editing?.can_filter_regional ?? false,
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -614,10 +617,15 @@ function UserFormModal({ editing, theme, me, areas, onSave, onCancel }: UserForm
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true);
     try {
-      const payload: Partial<AppUser> & { password?: string; allowed_areas?: string[] } = {
+      const payload: Partial<AppUser> & { password?: string; allowed_areas?: string[]; can_filter_regional?: boolean } = {
         email: form.email.trim(), role: form.role,
         allowed_areas: form.role === 'root' ? [] : form.allowed_areas,
       };
+      // Hanya sertakan can_filter_regional jika aktor adalah root — mencegah
+      // payload mengandung field yang akan ditolak server untuk non-root.
+      if (isRootActor) {
+        payload.can_filter_regional = form.role === 'root' ? true : form.can_filter_regional;
+      }
       payload.username = form.username.trim().toLowerCase();
       if (form.password) payload.password = form.password;
       await onSave(payload);
@@ -717,6 +725,32 @@ function UserFormModal({ editing, theme, me, areas, onSave, onCancel }: UserForm
               </div>
             )}
           </Field>
+
+          {/* Fitur khusus: filter regional — hanya root yang bisa mengatur ini,
+              dan tidak relevan untuk role root itu sendiri (sudah otomatis punya akses). */}
+          {isRootActor && form.role !== 'root' && (
+            <Field label="Fitur Khusus" hint="Izinkan user ini melihat dan menggunakan filter regional di dashboard">
+              <div
+                onClick={() => setF('can_filter_regional', !form.can_filter_regional)}
+                className="um-ichk"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 9,
+                  padding: '9px 11px', borderRadius: 7,
+                  background: form.can_filter_regional ? t.amberBg : t.input,
+                  border: `1.5px solid ${form.can_filter_regional ? t.amberBd : t.inputBd}`,
+                }}
+              >
+                <div style={{ width: 15, height: 15, borderRadius: 4, border: `1.5px solid ${form.can_filter_regional ? t.amber : t.inputBd}`, background: form.can_filter_regional ? t.amber : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {form.can_filter_regional && <svg width="9" height="9" viewBox="0 0 8 8"><path d="M1.5 4L3.2 5.7L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
+                </div>
+                <Globe2 size={13} color={form.can_filter_regional ? t.amber : t.tx3}/>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: form.can_filter_regional ? t.amber : t.tx2 }}>
+                  Akses Filter Regional
+                </span>
+              </div>
+            </Field>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 7, marginTop: 4 }}>
             <button type="button" onClick={onCancel} className="um-btn" style={{ padding: '8px 16px', borderRadius: 7, fontSize: 12, fontWeight: 600, background: t.input, color: t.tx2, border: `1px solid ${t.inputBd}`, cursor: 'pointer', fontFamily: F_SANS }}>Batal</button>
             <button type="submit" disabled={saving} className="um-btn" style={{ padding: '8px 18px', borderRadius: 7, fontSize: 12, fontWeight: 600, background: saving ? 'rgba(99,102,241,0.5)' : '#6366f1', color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: F_SANS, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -729,7 +763,7 @@ function UserFormModal({ editing, theme, me, areas, onSave, onCancel }: UserForm
   );
 }
 
-// ─── Delete Modal ────────────────────────────────────────────────────────────────
+// Delete Modal
 function DeleteModal({ userId, username, theme, onConfirm, onCancel }: {
   userId: string; username: string; theme: Theme;
   onConfirm: (id: string) => void; onCancel: () => void;
@@ -765,7 +799,7 @@ function DeleteModal({ userId, username, theme, onConfirm, onCancel }: {
   );
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────────
+// Main
 export default function UserManagement({ theme }: { theme: Theme }) {
   const { user: me }                  = useAuth();
   const t                             = tk(theme);
@@ -816,7 +850,7 @@ export default function UserManagement({ theme }: { theme: Theme }) {
     } catch { addToast('error', 'Terjadi kesalahan'); }
   }, [fetchUsers, addToast]);
 
-  const handleSave = async (payload: Partial<AppUser> & { password?: string; allowed_areas?: string[] }) => {
+  const handleSave = async (payload: Partial<AppUser> & { password?: string; allowed_areas?: string[]; can_filter_regional?: boolean }) => {
     const url    = editing ? `/api/users?id=${editing.id}` : '/api/users';
     const method = editing ? 'PATCH' : 'POST';
     await apiCall(
@@ -857,7 +891,7 @@ export default function UserManagement({ theme }: { theme: Theme }) {
   const canReset       = (u: AppUser) => canEdit(u);
   const canViewHistory = (u: AppUser) => canEdit(u) || u.id === me?.id;
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // Render
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
       <style>{CSS}</style>
@@ -890,7 +924,7 @@ export default function UserManagement({ theme }: { theme: Theme }) {
         />
       )}
 
-      {/* ── TOOLBAR BAR ── */}
+      {/* TOOLBAR BAR */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 12, flexWrap: 'wrap', marginBottom: 0, paddingBottom: 12,
@@ -917,14 +951,14 @@ export default function UserManagement({ theme }: { theme: Theme }) {
         </button>
       </div>
 
-      {/* ── TABLE ── */}
+      {/* TABLE */}
       <div style={{ overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: 0 }}>
         <style>{`.um-row:hover td { background: ${t.rowHov} !important; }`}</style>
         <table style={{ minWidth: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: F_SANS }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
             <tr style={{ background: t.thead }}>
-              {['User', 'Email', 'Role', 'Area', 'Status', 'Login Terakhir', 'Dibuat Oleh', 'Aksi'].map((h, i) => (
-                <th key={h} style={{ padding: '9px 14px', textAlign: i === 7 ? 'center' : 'left', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.theadTx, borderBottom: `1px solid rgba(255,255,255,0.06)`, fontFamily: F_MONO, whiteSpace: 'nowrap' }}>
+              {['User', 'Email', 'Role', 'Area', 'Regional', 'Status', 'Login Terakhir', 'Dibuat Oleh', 'Aksi'].map((h, i) => (
+                <th key={h} style={{ padding: '9px 14px', textAlign: i === 8 ? 'center' : 'left', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.theadTx, borderBottom: `1px solid rgba(255,255,255,0.06)`, fontFamily: F_MONO, whiteSpace: 'nowrap' }}>
                   {h}
                 </th>
               ))}
@@ -932,13 +966,13 @@ export default function UserManagement({ theme }: { theme: Theme }) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: t.tx3, fontSize: 12 }}>
+              <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: t.tx3, fontSize: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   <Spin sz={14}/> Memuat…
                 </div>
               </td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: t.tx3, fontSize: 12 }}>
+              <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: t.tx3, fontSize: 12 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                   <Users size={20} color={t.tx4}/>
                   <span>Belum ada user terdaftar</span>
@@ -948,6 +982,7 @@ export default function UserManagement({ theme }: { theme: Theme }) {
               const c      = roleCss(user.role, t);
               const isSelf = user.id === me?.id;
               const rowBg  = idx % 2 === 1 ? t.rowAlt : 'transparent';
+              const regionalActive = user.role === 'root' || !!user.can_filter_regional;
               return (
                 <tr key={user.id} className="um-row" style={{ borderBottom: `1px solid ${t.line}`, transition: 'background 0.08s' }}>
                   {/* User */}
@@ -988,6 +1023,10 @@ export default function UserManagement({ theme }: { theme: Theme }) {
                     ) : (
                       <span style={{ fontSize: 11, color: t.tx4, fontFamily: F_MONO }}>—</span>
                     )}
+                  </td>
+                  {/* Regional */}
+                  <td style={{ padding: '10px 14px', background: rowBg }}>
+                    <RegionalPill active={regionalActive} t={t}/>
                   </td>
                   {/* Status */}
                   <td style={{ padding: '10px 14px', background: rowBg }}><StatusPill active={user.is_active} t={t}/></td>
@@ -1035,7 +1074,7 @@ export default function UserManagement({ theme }: { theme: Theme }) {
         </table>
       </div>
 
-      {/* ── FOOTER ── */}
+      {/* FOOTER */}
       <div style={{ paddingTop: 10, marginTop: 'auto', borderTop: `1px solid ${t.line}`, display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
         {(['root', 'admin', 'user'] as UserRole[]).map(role => {
           const Icon = ROLE_CFG[role].icon;

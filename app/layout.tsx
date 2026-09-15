@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "YOY Dashboard",
+  title: "CGKN Dashboard",
   description: "Year On Year Sales Dashboard",
 };
 

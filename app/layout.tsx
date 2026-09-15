@@ -19,13 +19,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "YOY Dashboard",
-  description: "Year On Year Sales Dashboard",
+  title: "WSP Dashboard",
+  description: "WSP Year On Year Sales Dashboard",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "YOY Dashboard",
+    title: "WSP YOY Dashboard",
   },
   icons: {
     icon: [

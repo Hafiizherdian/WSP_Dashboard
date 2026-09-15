@@ -489,7 +489,7 @@ function ChartTooltip({ active, payload, label, theme, prefix = '', customerMap 
 function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
   const t = TK[theme];
   return (
-    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: active ? `${t.blue.text}22` : t.inputBg, color: active ? t.blue.text : t.textMuted, border: `1px solid ${active ? t.blue.text : t.borderInput}`, cursor: 'pointer', flexShrink: 0, transition: 'all .15s' }}>
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: active ? `${t.blue.text}22` : t.inputBg, color: active ? t.blue.text : t.text, border: `1px solid ${active ? t.blue.text : t.borderInput}`, cursor: 'pointer', flexShrink: 0, transition: 'all .15s' }}>
       {active
         ? <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><polyline points="1,12 5,7 8,9 11,4 15,2" /></svg>
         : <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="1" y="1" width="14" height="14" rx="2" /><line x1="1" y1="5.5" x2="15" y2="5.5" /><line x1="1" y1="10.5" x2="15" y2="10.5" /><line x1="5.5" y1="5.5" x2="5.5" y2="15" /></svg>
@@ -582,7 +582,7 @@ function ChartBox({ title, chartKey, height = 260, onExpand, year, theme, compac
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           {onToggleTable && <TableBtn onClick={onToggleTable} theme={theme} active={!!tableActive} />}
-          <button onClick={() => onExpand(chartKey, year)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: t.inputBg, color: t.textMuted, border: `1px solid ${t.borderInput}`, cursor: 'pointer', flexShrink: 0 }}>
+          <button onClick={() => onExpand(chartKey, year)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: t.inputBg, color: t.text, border: `1px solid ${t.borderInput}`, cursor: 'pointer', flexShrink: 0 }}>
             <Maximize2 size={9} /> Perbesar
           </button>
         </div>

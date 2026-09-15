@@ -605,8 +605,8 @@ function ExpandModal({ title, onClose, children, theme }: { title: string; onClo
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: t.modalOverlay, backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: t.modalBg, border: `1px solid ${t.modalBorder}`, borderRadius: 16, width: '100%', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.45)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg, flexShrink: 0, borderRadius: '16px 16px 0 0' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'IBM Plex Sans, sans-serif', color: t.text }}>{title}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg, color: t.tableHeadText, flexShrink: 0, borderRadius: '16px 16px 0 0' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'IBM Plex Sans, sans-serif', color: t.tableHeadText }}>{title}</span>
           <button onClick={onClose} style={{ background: t.inputBg, border: `1px solid ${t.borderInput}`, cursor: 'pointer', color: t.textMuted, padding: '5px 6px', borderRadius: 8, display: 'flex', alignItems: 'center' }}>
             <X size={16} />
           </button>

@@ -856,7 +856,7 @@ function LoadingOverlay({ theme, targetRef }: { theme: Theme; targetRef: React.R
             position:'absolute', inset:9, borderRadius:11,
             // background:'rgba(28,151,6,0.12)', border:'1px solid rgba(28,151,6,0.25)',
             display:'flex', alignItems:'center', justifyContent:'center',
-            animation:'lcPulse 4s ease-in-out infinite',
+            animation:' infinite',
           }}>
             <img src="/logo-cgkn.png" alt="CGKN" style={{ width:24, height:24, objectFit:'contain' }}/>
           </div>

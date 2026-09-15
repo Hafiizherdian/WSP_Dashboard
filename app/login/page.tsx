@@ -5,7 +5,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, AlertCircle, LogIn, User } from 'lucide-react';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// Constants
 
 const FONT_SANS = 'IBM Plex Sans, sans-serif';
 const FONT_MONO = 'IBM Plex Mono, monospace';
@@ -14,7 +14,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   forbidden: 'Akses ditolak untuk halaman tersebut.',
 };
 
-// ─── Style Builders ───────────────────────────────────────────────────────────
+// Style Builders
 
 const styles = {
   page: {
@@ -53,7 +53,7 @@ const styles = {
 
   illustrationImg: {
     width: '100%',
-    maxWidth: 680,
+    maxWidth: 880,
     height: 'auto',
     objectFit: 'contain',
   } as React.CSSProperties,
@@ -128,7 +128,7 @@ const styles = {
   }),
 };
 
-// ─── Input focus/blur handlers ────────────────────────────────────────────────
+// Input focus/blur handlers
 
 const inputFocusHandlers = {
   onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
@@ -141,7 +141,7 @@ const inputFocusHandlers = {
   },
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// Sub-components
 
 function LoadingSpinner() {
   return (
@@ -215,19 +215,19 @@ function CardLogo() {
   );
 }
 
-// ─── Illustration Panel ────────────────────────────────────────────────────────
+// Illustration Panel
 
 function IllustrationPanel() {
   return (
     <img
-      src="/loginaset.jpg"
+      src="/loginaset2.jpg"
       alt="CGKN Dashboard Illustration"
       style={styles.illustrationImg}
     />
   );
 }
 
-// ─── Login Form ───────────────────────────────────────────────────────────────
+// Login Form
 
 function LoginForm() {
   const router   = useRouter();
@@ -381,7 +381,7 @@ function LoginForm() {
   );
 }
 
-// ─── Login Page ───────────────────────────────────────────────────────────────
+// Login Page
 
 export default function LoginPage() {
   return (

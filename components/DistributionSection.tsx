@@ -1103,7 +1103,16 @@ export default function DistributionSection({
 
   const data     = cachedData ?? EMPTY_DATA;
   const s        = data.summary;
-  const areaName = areas.find(a => a.id === areaFilter)?.name;
+  const areaNames = useMemo(() => {
+    if (!areaFilter) return '';
+    return areaFilter
+      .split(',')
+      .map(id => {
+        const found = areas.find(a => a.id === id.trim());
+        return found ? found.name : id.trim();
+      })
+      .join(', ');
+  }, [areaFilter, areas]);
 
   const hasActiveFilter = !!(productFilter || outletTypeFilter || salesmanFilter);
 
@@ -1139,9 +1148,9 @@ export default function DistributionSection({
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono,monospace' }}>Distribusi</div>
           <div style={{ fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace', marginTop: 2 }}>
             Achievement = Av-Out / Plan
-            {areaName && (
+            {areaNames && (
               <span style={{ marginLeft: 8, padding: '1px 6px', borderRadius: 4, background: t.tabBg, color: t.textSub, fontSize: 9 }}>
-                Area: {areaName}
+                Area: {areaNames}
               </span>
             )}
           </div>

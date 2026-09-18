@@ -103,7 +103,10 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      const area       = searchParams.get('area') || '';
+      // MODIFIKASI: Baca area sebagai string lalu pecah jadi array untuk support multiple areas
+      const areaParam  = searchParams.get('area') || '';
+      const reqAreas   = areaParam.split(',').map(a => a.trim()).filter(Boolean);
+      
       const salesman   = searchParams.get('salesman') || '';
       const product    = searchParams.get('product') || '';
       const weekStart  = parseInt(searchParams.get('weekStart') || '1');
@@ -114,13 +117,13 @@ export async function GET(request: NextRequest) {
 
       log('[GET] request received', {
         user: session.username, role: session.role,
-        area, salesman, product, city, fileId, outletType,
+        area: reqAreas.join(','), salesman, product, city, fileId, outletType,
         weekStart, weekEnd,
       });
 
       // Cek cache dulu sebelum sentuh DB  
       const cacheParams = {
-        area, salesman, product, city, fileId, outletType,
+        area: reqAreas.join(','), salesman, product, city, fileId, outletType,
         weekStart: String(weekStart), weekEnd: String(weekEnd),
         // area kena RBAC per session, jadi ikut masuk key supaya user dengan
         // allowed_areas beda, hasil cache satu sama lain
@@ -139,55 +142,80 @@ export async function GET(request: NextRequest) {
       let idx = 1;
       const conditions: string[] = ['1=1'];
 
-      if (area) {
-        conditions.push(`area = $${idx++}`);
-        params.push(area);
+      // --- PERUBAHAN DI SINI: Hardcode string aman ke query ---
+      if (reqAreas.length > 0) {
+        const safeAreas = reqAreas.map(a => a.replace(/[^a-zA-Z0-9_]/g, ''));
+        const inClause = safeAreas.map(a => `'${a}'`).join(',');
+        conditions.push(`area IN (${inClause})`);
       }
       if (session.role !== 'root' && session.allowed_areas?.length > 0) {
-        conditions.push(`area = ANY($${idx++})`);
-        params.push(session.allowed_areas);
+        const safeAreas = session.allowed_areas.map(a => a.replace(/[^a-zA-Z0-9_]/g, ''));
+        const inClause = safeAreas.map(a => `'${a}'`).join(',');
+        conditions.push(`area IN (${inClause})`);
       }
+      // ---------------------------------------------------------
+
       if (salesman)   { conditions.push(`salesman ILIKE $${idx++}`);    params.push(`%${salesman}%`); }
       if (product)    { conditions.push(`product ILIKE $${idx++}`);     params.push(`%${product}%`);  }
       if (city)       { conditions.push(`city ILIKE $${idx++}`);        params.push(`%${city}%`);     }
       if (fileId)     { conditions.push(`dist_file_id = $${idx++}`);    params.push(parseInt(fileId)); }
       if (outletType) { conditions.push(`outlet_type ILIKE $${idx++}`); params.push(outletType); }
+      
       conditions.push(`week_num BETWEEN $${idx++} AND $${idx++}`);
       params.push(weekStart, weekEnd);
+      
       const where = conditions.join(' AND ');
 
       // WHERE tanpa filter salesman 
       const baseConditions: string[] = ['1=1'];
       const baseParams: any[] = [];
       let baseIdx = 1;
-      if (area) { baseConditions.push(`area = $${baseIdx++}`); baseParams.push(area); }
-      if (session.role !== 'root' && session.allowed_areas?.length > 0) {
-        baseConditions.push(`area = ANY($${baseIdx++})`);
-        baseParams.push(session.allowed_areas);
+      
+      if (reqAreas.length > 0) { 
+        const safeAreas = reqAreas.map(a => a.replace(/[^a-zA-Z0-9_]/g, ''));
+        const inClause = safeAreas.map(a => `'${a}'`).join(',');
+        baseConditions.push(`area IN (${inClause})`);
       }
+      if (session.role !== 'root' && session.allowed_areas?.length > 0) {
+        const safeAreas = session.allowed_areas.map(a => a.replace(/[^a-zA-Z0-9_]/g, ''));
+        const inClause = safeAreas.map(a => `'${a}'`).join(',');
+        baseConditions.push(`area IN (${inClause})`);
+      }
+
       if (product)    { baseConditions.push(`product ILIKE $${baseIdx++}`);     baseParams.push(`%${product}%`);  }
       if (city)       { baseConditions.push(`city ILIKE $${baseIdx++}`);        baseParams.push(`%${city}%`);     }
       if (fileId)     { baseConditions.push(`dist_file_id = $${baseIdx++}`);    baseParams.push(parseInt(fileId)); }
       if (outletType) { baseConditions.push(`outlet_type ILIKE $${baseIdx++}`); baseParams.push(outletType); }
+      
       baseConditions.push(`week_num BETWEEN $${baseIdx++} AND $${baseIdx++}`);
       baseParams.push(weekStart, weekEnd);
+      
       const whereBase = baseConditions.join(' AND ');
 
       // WHERE dengan salesman tapi TANPA filter product 
       const withSalConditions: string[] = ['1=1'];
       const withSalParams: any[] = [];
       let withSalIdx = 1;
-      if (area) { withSalConditions.push(`area = $${withSalIdx++}`); withSalParams.push(area); }
-      if (session.role !== 'root' && session.allowed_areas?.length > 0) {
-        withSalConditions.push(`area = ANY($${withSalIdx++})`);
-        withSalParams.push(session.allowed_areas);
+      
+      if (reqAreas.length > 0) { 
+        const safeAreas = reqAreas.map(a => a.replace(/[^a-zA-Z0-9_]/g, ''));
+        const inClause = safeAreas.map(a => `'${a}'`).join(',');
+        withSalConditions.push(`area IN (${inClause})`);
       }
+      if (session.role !== 'root' && session.allowed_areas?.length > 0) {
+        const safeAreas = session.allowed_areas.map(a => a.replace(/[^a-zA-Z0-9_]/g, ''));
+        const inClause = safeAreas.map(a => `'${a}'`).join(',');
+        withSalConditions.push(`area IN (${inClause})`);
+      }
+
       if (salesman)   { withSalConditions.push(`salesman ILIKE $${withSalIdx++}`);    withSalParams.push(`%${salesman}%`); }
       if (city)       { withSalConditions.push(`city ILIKE $${withSalIdx++}`);        withSalParams.push(`%${city}%`);     }
       if (fileId)     { withSalConditions.push(`dist_file_id = $${withSalIdx++}`);    withSalParams.push(parseInt(fileId)); }
       if (outletType) { withSalConditions.push(`outlet_type ILIKE $${withSalIdx++}`); withSalParams.push(outletType); }
+      
       withSalConditions.push(`week_num BETWEEN $${withSalIdx++} AND $${withSalIdx++}`);
       withSalParams.push(weekStart, weekEnd);
+      
       const whereWithSal = withSalConditions.join(' AND ');
 
       log('[GET] running queries in parallel...', { queryCount: 10 });

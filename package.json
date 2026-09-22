@@ -1,9 +1,9 @@
 {
-  "name": "WSPdashboard",
+  "name": "dashboard2y2",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": " next dev --webpack -p 3003",
+    "dev": " next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -20,29 +20,27 @@
     "next": "16.1.1",
     "node-fetch": "^3.3.2",
     "pg": "^8.11.3",
-    "pg-cursor": "^2.19.0",
+    "pg-cursor": "^2.21.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^3.6.0",
     "tailwind-merge": "^3.4.0",
+    "uuid": "^14.0.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.0",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.10.9",
     "@types/pg-cursor": "^2.7.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/uuid": "^10.0.0",
-    "autoprefixer": "^10.5.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
-    "postcss": "^8.5.15",
-    "tailwindcss": "^4.3.0",
+    "tailwindcss": "^4",
     "typescript": "^5"
   },
-  "description": "Sales Analysis Dashboard WSP dengan perbandingan year-over-year ",
+  "description": "Sales Analysis Dashboard dengan perbandingan year-over-year ",
   "keywords": [
     "nextjs",
     "typescript",
@@ -50,10 +48,10 @@
     "sales",
     "analytics",
     "cakragkndashboard",
-    "CGKN WSP Dashboard",
+    "CGKNDashboard",
     "cgkndashboard"
   ],
-  "author": "Hafiizh Herdian",
+  "author": "",
   "license": "ISC",
   "type": "module"
 }

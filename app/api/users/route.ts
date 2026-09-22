@@ -9,7 +9,8 @@ import { canAccessArea } from '@/lib/auth/types';
 export async function GET(req: NextRequest) {
   return withAuth(req, 'view_users', async () => {
     const result = await db.query(
-      `SELECT u.id, u.username, u.email, u.role, u.is_active, u.created_at, u.last_login, u.allowed_areas,
+      `SELECT u.id, u.username, u.email, u.role, u.is_active, u.created_at, u.last_login,
+              u.allowed_areas, u.can_filter_regional,
               c.username AS created_by_name
        FROM   app_users u
        LEFT JOIN app_users c ON c.id = u.created_by
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
 // ─── POST /api/users  (create) ────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   return withAuth(req, 'manage_users', async (session) => {
-    const { username, email, password, role, allowed_areas } = await req.json();
+    const { username, email, password, role, allowed_areas, can_filter_regional } = await req.json();
 
     if (!username || !email || !password || !role) {
       return NextResponse.json({ error: 'Semua field wajib diisi' }, { status: 400 });
@@ -45,14 +46,31 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Hanya root yang boleh memberi izin filter regional ke user lain.
+    // Admin yang membuat user baru tidak bisa menyalakan flag ini sendiri.
+    if (can_filter_regional === true && session.role !== 'root') {
+      return NextResponse.json(
+        { error: 'Hanya root yang dapat mengatur akses filter regional' },
+        { status: 403 }
+      );
+    }
+
     const password_hash = await hash(password, 12);
 
     try {
       const result = await db.query(
-        `INSERT INTO app_users (username, email, password_hash, role, allowed_areas, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, username, email, role, is_active, created_at, allowed_areas`,
-        [username.trim().toLowerCase(), email.trim().toLowerCase(), password_hash, role, allowed_areas || [], session.id]
+        `INSERT INTO app_users (username, email, password_hash, role, allowed_areas, can_filter_regional, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, username, email, role, is_active, created_at, allowed_areas, can_filter_regional`,
+        [
+          username.trim().toLowerCase(),
+          email.trim().toLowerCase(),
+          password_hash,
+          role,
+          allowed_areas || [],
+          !!can_filter_regional,
+          session.id,
+        ]
       );
       return NextResponse.json({ success: true, data: result.rows[0] }, { status: 201 });
     } catch (err: unknown) {
@@ -77,15 +95,21 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Tidak bisa mengubah role/status akun sendiri' }, { status: 400 });
     }
 
-    //  Tambah 'username' ke daftar field yang boleh diupdate
-    const allowed = ['username', 'role', 'is_active', 'email', 'allowed_areas'];
+    // Hanya root yang boleh mengubah flag can_filter_regional
+    if (body.can_filter_regional !== undefined && session.role !== 'root') {
+      return NextResponse.json(
+        { error: 'Hanya root yang dapat mengatur akses filter regional' },
+        { status: 403 }
+      );
+    }
+
+    const allowed = ['username', 'role', 'is_active', 'email', 'allowed_areas', 'can_filter_regional'];
     const fields: string[] = [];
     const values: unknown[] = [];
     let   idx = 1;
 
     for (const key of allowed) {
       if (body[key] !== undefined) {
-        // Normalise username ke lowercase saat update
         const val = key === 'username'
           ? (body[key] as string).trim().toLowerCase()
           : body[key];
@@ -115,11 +139,10 @@ export async function PATCH(req: NextRequest) {
 
     values.push(id);
 
-    //  Wrap dengan try/catch untuk handle duplikat username/email
     try {
       const result = await db.query(
         `UPDATE app_users SET ${fields.join(', ')} WHERE id = $${idx}
-         RETURNING id, username, email, role, is_active, updated_at, allowed_areas`,
+         RETURNING id, username, email, role, is_active, updated_at, allowed_areas, can_filter_regional`,
         values
       );
       if (!result.rows.length) return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 });

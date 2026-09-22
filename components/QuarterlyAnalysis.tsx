@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { QuarterlyData } from '@/types/sales';
 import { formatQuantity, formatPercentage } from '@/lib/utils';
 import { getProductCategory } from '@/lib/productCategories';
@@ -132,7 +132,7 @@ const makeYFmt = (unit: string) => (v: number) => {
   return `${Math.round(v)} ${suffix}`;
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 function getDetailActual(d: any, unit: string): number {
   if (unit === 'omzet') {
     // FIX v11: backend sekarang selalu push omzet: { target, actual }
@@ -160,10 +160,10 @@ function getMonthFromWeek(week: number, year: number): string {
   return months[date.getMonth()];
 }
 
-// ── FIX v11: tambah omzet ke WeekUnitData ────────────────────────────────────
+// FIX v11: tambah omzet ke WeekUnitData
 type WeekUnitData = {
   units_dos: number; units_bks: number; units_slop: number; units_bal: number;
-  omzet?: number;   // ← baru: tersedia dari backend v11
+  omzet?: number;   
 };
 
 function weekHasTarget(w: any): boolean {
@@ -175,7 +175,7 @@ function monthHasTarget(m: any): boolean {
   return m.target > 0;
 }
 
-// ─── AchieveBadge ─────────────────────────────────────────────────────────────
+// AchieveBadge
 function AchieveBadge({ pct, theme, hasTarget }: { pct: number; theme: Theme; hasTarget: boolean }) {
   const t = TK[theme];
   if (!hasTarget) {
@@ -191,7 +191,7 @@ function AchieveBadge({ pct, theme, hasTarget }: { pct: number; theme: Theme; ha
   );
 }
 
-// ─── ViewToggle ───────────────────────────────────────────────────────────────
+// ViewToggle
 function ViewToggle({ value, onChange, theme }: { value: 'chart' | 'table'; onChange: (v: 'chart' | 'table') => void; theme: Theme }) {
   const t = TK[theme];
   return (
@@ -206,7 +206,7 @@ function ViewToggle({ value, onChange, theme }: { value: 'chart' | 'table'; onCh
   );
 }
 
-// ─── FilterSelect ─────────────────────────────────────────────────────────────
+// FilterSelect
 function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, children, theme }: {
   label: string; accentColor?: string; value: string | number;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
@@ -223,7 +223,7 @@ function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, childre
   );
 }
 
-// ─── ExpandBtn ────────────────────────────────────────────────────────────────
+// ExpandBtn
 function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   const t = TK[theme];
   return (
@@ -233,7 +233,7 @@ function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   );
 }
 
-// ─── TableBtn ─────────────────────────────────────────────────────────────────
+// TableBtn
 // Sama seperti di WeekComparisonComponent: toggle Chart <-> Tabel di kartu overview.
 function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
   const t = TK[theme];
@@ -248,7 +248,7 @@ function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Them
   );
 }
 
-// ─── ChartTooltip ─────────────────────────────────────────────────────────────
+// ChartTooltip
 function ChartTooltip({ active, payload, label, labelPrefix, theme, unit }: any) {
   const t = TK[theme as Theme];
   if (!active || !payload?.length) return null;
@@ -280,7 +280,7 @@ function ChartTooltip({ active, payload, label, labelPrefix, theme, unit }: any)
   );
 }
 
-// ─── WeeklyDetailView ─────────────────────────────────────────────────────────
+// WeeklyDetailView
 function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal }: {
   data: QuarterlyData[]; selectedUnit: string; theme: Theme;
   card: (extra?: React.CSSProperties) => React.CSSProperties;
@@ -489,7 +489,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
   );
 }
 
-// ─── MonthlyDetailView ────────────────────────────────────────────────────────
+// MonthlyDetailView
 function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal }: {
   data: QuarterlyData[]; selectedUnit: string; theme: Theme;
   card: (extra?: React.CSSProperties) => React.CSSProperties;
@@ -707,7 +707,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
   );
 }
 
-// ─── OverviewTableView ────────────────────────────────────────────────────────
+// OverviewTableView
 // Tabel sortable untuk chart Bar ("Target vs Actual") & Pie ("Distribusi") di
 // tab Overview. Dipakai baik inline di kartu (mode toggle) maupun di dalam modal
 // saat tombol Perbesar dipencet ketika lagi mode tabel.
@@ -827,7 +827,7 @@ function OverviewTableView({
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// Main Component
 interface QuarterlyAnalysisProps {
   data: QuarterlyData[];
   theme?: Theme;
@@ -845,6 +845,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
   const isOmzet         = selectedUnit === 'omzet';
 
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedProduct, setSelectedProduct]   = useState('all');
   const [selectedQuarter, setSelectedQuarter]   = useState('all');
   const [expandedChart, setExpandedChart]       = useState<'bar' | 'pie' | null>(null);
   const [viewMode, setViewMode]                 = useState<'overview' | 'weekly' | 'monthly'>('overview');
@@ -865,6 +866,25 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
     return Array.from(cats).sort();
   }, [data]);
 
+  const availableProducts = useMemo(() => {
+  const prods = new Set<string>();
+  data.forEach(q => q.details?.forEach((d: any) => {
+    if (selectedCategory !== 'all') {
+      const cat = d.productCategory ?? getProductCategory(d.product);
+      if (cat !== selectedCategory) return;
+    }
+    if (d.product) prods.add(d.product);
+  }));
+  return Array.from(prods).sort();
+}, [data, selectedCategory]);
+
+// reset produk kalau kategori berubah dan produk lama sudah tidak ada di daftar
+useEffect(() => {
+  if (selectedProduct !== 'all' && !availableProducts.includes(selectedProduct)) {
+    setSelectedProduct('all');
+  }
+}, [availableProducts, selectedProduct]);
+
   const quarterOptions = useMemo(() => Array.from(new Set(data.map(q => q.quarter))).sort(), [data]);
 
   // FIX UTAMA: sebelumnya ada percabangan khusus untuk `selectedCategory === 'all'`
@@ -880,12 +900,14 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
     return data
       .filter(q => selectedQuarter === 'all' || q.quarter === selectedQuarter)
       .map(q => {
-        const filteredDetails = selectedCategory === 'all'
-          ? (q.details ?? [])
-          : (q.details ?? []).filter((d: any) => {
-              const cat = d.productCategory ?? getProductCategory(d.product);
-              return cat === selectedCategory;
-            });
+        const filteredDetails = (q.details ?? []).filter((d: any) => {
+          if (selectedCategory !== 'all') {
+            const cat = d.productCategory ?? getProductCategory(d.product);
+            if (cat !== selectedCategory) return false;
+          }
+          if (selectedProduct !== 'all' && d.product !== selectedProduct) return false;
+          return true;
+        });
 
         if (!filteredDetails.length) {
           return {
@@ -935,7 +957,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
             tgtSlop = parseFloat(tgtSlop.toFixed(2)); tgtBal = parseFloat(tgtBal.toFixed(2));
           }
 
-          // ── FIX v11: saat isOmzet, gunakan omz (terfilter kategori)
+          //    FIX v11: saat isOmzet, gunakan omz (terfilter kategori)
           //    bukan wb.actual yang merupakan total SEMUA kategori
           const selActual = isOmzet
             ? omz
@@ -958,7 +980,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
           const bks  = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_bks?.actual  ?? 0), 0);
           const slop = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_slop?.actual ?? 0), 0);
           const bal  = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_bal?.actual  ?? 0), 0);
-          // ── FIX v11: omzet bulanan dari sum wb.actual (yg sudah pakai omz terfilter)
+          // FIX v11: omzet bulanan dari sum wb.actual (yg sudah pakai omz terfilter)
           const omzMonth = monthWeeks.reduce((s: number, wb: any) => s + (wb.actual ?? 0), 0);
           const tDos = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_dos?.target  ?? 0), 0);
           const tBks = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_bks?.target  ?? 0), 0);
@@ -975,7 +997,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
 
         return { ...q, details:filteredDetails, target:Math.round(tv*100)/100, actual:Math.round(av*100)/100, variance:Math.round(vr*100)/100, variancePercentage:Math.round(tv>0?(vr/tv)*100*10:0)/10, weeklyBreakdown:newWeeklyBreakdown, monthlyBreakdown:newMonthlyBreakdown };
       });
-  }, [data, selectedUnit, selectedCategory, selectedQuarter, isOmzet]);
+  }, [data, selectedUnit, selectedCategory, selectedProduct, selectedQuarter, isOmzet]);
 
   const performanceData = filteredData.map(q => ({ quarter: q.quarter, target: q.target, actual: q.actual, achievement: q.target > 0 ? (q.actual / q.target) * 100 : 0 }));
   const pieData         = filteredData.map(q => ({ name: q.quarter, value: q.actual }));
@@ -1050,13 +1072,17 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
             <FilterSelect label="Unit" accentColor="#10b981" value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} theme={theme}>
               {UNIT_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ background: t.selectBg }}>{o.label}</option>)}
             </FilterSelect>
-            <FilterSelect label="Kategori" accentColor="#8b5cf6" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} theme={theme}>
-              <option value="all" style={{ background: t.selectBg }}>Semua</option>
-              {availableCategories.map(c => <option key={c} value={c} style={{ background: t.selectBg }}>{c}</option>)}
-            </FilterSelect>
             <FilterSelect label="Kuartal" accentColor="#3b82f6" value={selectedQuarter} onChange={e => setSelectedQuarter(e.target.value)} theme={theme}>
               <option value="all" style={{ background: t.selectBg }}>Semua Kuartal</option>
               {quarterOptions.map(q => <option key={q} value={q} style={{ background: t.selectBg }}>{q}</option>)}
+            </FilterSelect>
+            <FilterSelect label="Kategori" accentColor="#8b5cf6" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} theme={theme}>
+              <option value="all" style={{ background: t.selectBg }}>Semua Kategori</option>
+              {availableCategories.map(c => <option key={c} value={c} style={{ background: t.selectBg }}>{c}</option>)}
+            </FilterSelect>
+            <FilterSelect label="Brand" accentColor="#ec4899" value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} theme={theme}>
+              <option value="all" style={{ background: t.selectBg }}>Semua Brand</option>
+              {availableProducts.map(p => <option key={p} value={p} style={{ background: t.selectBg }}>{p}</option>)}
             </FilterSelect>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {[
@@ -1074,7 +1100,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
         </div>
       </div>
 
-      {/* ── Overview ── */}
+      {/* Overview */}
       {viewMode === 'overview' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSalesData } from '@/lib/databasev2';
 import { withAuth } from '@/lib/auth/session';
+import { getCached, setCached } from '@/lib/salesCache';
+import { pool } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   return withAuth(request, 'view_stats', async (user) => {
@@ -19,6 +21,7 @@ export async function GET(request: NextRequest) {
       const product     = searchParams.get('product');
       const city        = searchParams.get('city');
       const area        = searchParams.get('area');
+      const regional     = searchParams.get('regional');
       const limit       = searchParams.get('limit');
       const selectedUnit = searchParams.get('selectedUnit');
 
@@ -34,33 +37,66 @@ export async function GET(request: NextRequest) {
       if (limit)        filters.limit        = parseInt(limit);
       if (selectedUnit) filters.selectedUnit = selectedUnit;
 
+      // ── Resolve regional → daftar area_ids (dipakai lewat filters.allowedAreas,
+      //    jalur yang sama dengan RBAC multi-area di bawah) ────────────────────
+      let regionalAreaIds: string[] | null = null;
+      if (regional) {
+        const r = await pool.query('SELECT area_ids FROM regions WHERE id = $1', [regional]);
+        if (r.rows.length === 0) {
+          return NextResponse.json(
+            { success: false, error: 'Regional tidak ditemukan' },
+            { status: 404 },
+          );
+        }
+        regionalAreaIds = r.rows[0].area_ids ?? [];
+      }
+
       // ── Area-based filtering & target resolution per role ─────────────────
       if (user.role === 'root') {
-        // Root dengan area spesifik → validasi tidak diperlukan, langsung pakai
-        // Root tanpa area filter   → resolveTargetAreas() di databasev2 akan
-        //                            fetch semua area dari DB secara otomatis
-        // Tidak perlu set allowedAreas — biarkan databasev2 yang menangani
+        if (regionalAreaIds) {
+          // Root pilih regional → filter ke area-area anggotanya
+          filters.allowedAreas = regionalAreaIds;
+        }
+        // Root tanpa area/regional filter → resolveTargetAreas() di databasev2
+        //                                    fetch semua area dari DB otomatis
       } else if (user.allowed_areas && user.allowed_areas.length > 0) {
-        if (filters.area) {
-          // Ada area spesifik dipilih — validasi akses
+        if (regionalAreaIds) {
+          // Non-root pilih regional → irisan dengan allowed_areas dia (defense
+          // in depth, frontend juga sudah filter regional yang bisa dipilih)
+          const intersect = regionalAreaIds.filter(id => user.allowed_areas.includes(id));
+          if (intersect.length === 0) {
+            return NextResponse.json(
+              { success: false, error: 'Anda tidak memiliki akses ke regional ini' },
+              { status: 403 },
+            );
+          }
+          filters.allowedAreas = intersect;
+        } else if (filters.area) {
           if (!user.allowed_areas.includes(filters.area)) {
             return NextResponse.json(
               { success: false, error: 'Anda tidak memiliki akses ke area ini' },
               { status: 403 },
             );
           }
-          // filters.area valid — resolveTargetAreas() akan pakai [filters.area]
         } else {
-          // Tidak pilih area → pakai semua allowed areas milik user
-          // Berlaku untuk: filter sales records DAN target queries
           filters.allowedAreas = user.allowed_areas;
         }
       } else {
-        // User tanpa allowed_areas sama sekali → tidak ada data & target
         filters.allowedAreas = [];
       }
 
+      // Cek cache dulu sebelum sentuh DB.
+      // allowedAreas ikut masuk cache key karena kena RBAC per user —
+      // supaya user dengan allowed_areas beda nggak saling "berbagi" hasil cache.
+      const cacheParams = { ...filters };
+      const cached = getCached(cacheParams);
+      if (cached) {
+        return NextResponse.json({ success: true, data: cached });
+      }
+
       const data = await fetchSalesData(filters);
+
+      setCached(cacheParams, data);
 
       return NextResponse.json({
         success: true,

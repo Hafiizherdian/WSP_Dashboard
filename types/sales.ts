@@ -38,7 +38,11 @@ export interface OutletSalesData {
   customer_no?: string;
   customer?: string;      // Nama customer
   salesman?: string;      // Nama salesman
-  weeklyDozNet?:  Record<number, number>; 
+  weeklyDozNet?:  Record<number, number>;
+  weeklyUnitsBks?:  Record<number, number>;   // NEW — breakdown mingguan units_bks (nilai asli, bukan hasil kali rasio)
+  weeklyUnitsSlop?: Record<number, number>;   // NEW — breakdown mingguan units_slop
+  weeklyUnitsBal?:  Record<number, number>;   // NEW — breakdown mingguan units_bal
+  weeklyOmzet?:     Record<number, number>;   // NEW — breakdown mingguan omzet
 }
 
 /**
@@ -202,6 +206,7 @@ export interface ComparisonWeeks {
 export interface SalesData {
   weeklyData: WeeklySales[];
   quarterlyData: QuarterlyData[];
+  QuarterlyYoYData: QuarterlyYoYData[];
   weekComparisons: WeekComparison[];
   l4wc4wData: L4WC4WData;
   yearOnYearGrowth: YearOnYearGrowth;
@@ -209,6 +214,7 @@ export interface SalesData {
   comparisonWeeks: ComparisonWeeks;
   outletData?: OutletSalesData[];  // Data penjualan per outlet (opsional)
   piutangList?: PiutangRecord[];
+  distributionData?: any;
 }
 
 /**
@@ -254,3 +260,45 @@ export interface PiutangRecord {
   giro: number;        // Jumlah Giro (Rupiah)
 }
 
+export interface YoYWeekUnitData {
+  units_dos: number; units_bks: number; units_slop: number; units_bal: number;
+  omzet?: number;
+}
+
+export interface YoYProductDetail {
+  product: string;
+  productCategory?: string;
+  units_dos?: { previous: number; current: number };
+  units_bks?:  { previous: number; current: number };
+  units_slop?: { previous: number; current: number };
+  units_bal?:  { previous: number; current: number };
+  omzet?:      { previous: number; current: number };
+  weeklyPrevious?: Record<number, YoYWeekUnitData>; // key = nomor minggu
+  weeklyCurrent?:  Record<number, YoYWeekUnitData>;
+}
+
+export interface YoYWeekBreakdown {
+  week: number;
+  previous: number; current: number; variance: number; variancePercentage: number;
+  units_dos?: { previous: number; current: number };
+  units_bks?:  { previous: number; current: number };
+  units_slop?: { previous: number; current: number };
+  units_bal?:  { previous: number; current: number };
+}
+
+export interface YoYMonthBreakdown {
+  month: string;
+  previous: number; current: number; variance: number; variancePercentage: number;
+  units_dos?: { previous: number; current: number };
+  units_bks?:  { previous: number; current: number };
+  units_slop?: { previous: number; current: number };
+  units_bal?:  { previous: number; current: number };
+}
+
+export interface QuarterlyYoYData {
+  quarter: string;
+  previous: number; current: number; variance: number; variancePercentage: number;
+  details?: YoYProductDetail[];
+  weeklyBreakdown?: YoYWeekBreakdown[];
+  monthlyBreakdown?: YoYMonthBreakdown[];
+}

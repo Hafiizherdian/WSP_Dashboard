@@ -1,0 +1,2280 @@
+/**
+ * Database utilities untuk dashboard
+ * Fungsi untuk fetch dan process data dari PostgreSQL
+ *
+ * PERUBAHAN v11 (fix omzet di QuarterlyProductDetail):
+ *   - generateQuarterlyProductDetails: hitung productOmzetActual SELALU
+ *     (bukan cuma saat unitType==='omzet') dan push sebagai field
+ *     omzet: { target: 0, actual: productOmzetActual } di setiap detail
+ *     produk
+ *   - weeklyActuals per minggu per produk kini menyertakan field omzet
+ *     QuarterlyAnalysis.tsx bisa baca omzet terfilter-kategori per minggu
+ *
+ * PERUBAHAN v12 (fix omzet di ProductL4WC1WData — generateProductL4WC1WData):
+ *   - Field nested `omzet: { l4w, c1w, l4wTotal }` per produk sebelumnya
+ *     salah baca: `l4w` benar dari `l4wAvg.omzet`, tapi `c1w` & `l4wTotal`
+ *     ke-tukar baca dari `c1wData.units_dos` / `l4wTotal.units_dos`
+ *     (kemungkinan copy-paste dari baris units_dos di atasnya). Akibatnya
+ *     saat filter Unit = Omzet dipilih di L4WC4WAnalysisComponent, nilai
+ *     C1W & L4W-Total yang tampil adalah angka Dos, bukan Rupiah.
+ *   - Fix: c1w & l4wTotal sekarang konsisten baca dari `.omzet`.
+ *   - Bonus cleanup: field `units_omzet: number` di type `WeekEntry` dihapus
+ *     karena tidak pernah diisi di object literal manapun (dead field, bisa
+ *     memicu TS error "missing property" pada object literal yang strict).
+ */
+
+import Cursor from 'pg-cursor';
+import { pool } from './db';
+import {
+  SalesData, WeeklySales, QuarterlyData, WeekComparison,
+  L4WC4WData, YearOnYearGrowth, ComparisonWeeks,
+  WeekComparisonProductDetail, WeeklyTrendData, OutletSalesData,
+  ProductL4WC1WData, WeeklyBreakdown, MonthlyBreakdown, QuarterlyProductDetail,
+  QuarterlyYoYData,
+} from '@/types/sales';
+import {PiutangRecord } from '@/types/sales';
+import { getProductCategory } from './productCategories';
+
+const OMZET_SCALE = 1;
+const STREAM_BATCH_SIZE = 20_000;
+
+function getOmzetValue(record: any): number {
+  if (!record) return 0;
+  if (typeof record.omzetValue === 'number') return record.omzetValue;
+  const raw = record.omzet;
+  const numeric = typeof raw === 'number' ? raw : parseFloat(raw ?? '0');
+  const normalized = Number.isFinite(numeric) ? numeric * OMZET_SCALE : 0;
+  record.omzetValue = normalized;
+  return normalized;
+}
+
+function getUnitValue(record: any, unitType: string): number {
+  switch (unitType) {
+    case 'units_bks':  return Number(record.units_bks)  || 0;
+    case 'units_slop': return Number(record.units_slop) || 0;
+    case 'units_bal':  return Number(record.units_bal)  || 0;
+    case 'units_dos':
+    default:           return Number(record.units_dos)  || 0;
+  }
+}
+
+interface FetchFilters {
+  year1?: number;
+  year2?: number;
+  product?: string;
+  city?: string;
+  area?: string;
+  weekStart1?: number;
+  weekEnd1?: number;
+  weekStart2?: number;
+  weekEnd2?: number;
+  selectedUnit?: string;
+  allowedAreas?: string[];
+}
+
+// ─── ISO week cross-year resolution ──────────────────────────────────────────
+
+function parseDateLocal(dateVal: any): { year: number; month: number; day: number } {
+
+  // Variabel sementara untuk menyimpan nilai jika input berupa string.
+  let str: string | null = null;
+
+  // ==============================
+  // CASE 1 : Input berupa string
+  // ==============================
+  //
+  // Contoh:
+  // "2025-07-21"
+  // "2025-07-21"
+  //
+  // Disimpan dulu agar nanti diparsing menggunakan regex.
+  if (typeof dateVal === 'string') {
+    str = dateVal;
+
+  // ==============================
+  // CASE 2 : Input berupa Date
+  // ==============================
+  //
+  // Contoh:
+  // new Date()
+  // new Date("2025-07-21")
+  //
+  } else if (dateVal instanceof Date) {
+
+    // Ambil jam UTC.
+    //
+    // Misal:
+    // 2025-07-21
+    // maka utcHour = 0
+    //
+    // 2025-07-21
+    // maka utcHour = 15
+    const utcHour = dateVal.getUTCHours();
+
+    // Jika jam UTC masih sebelum jam 12 siang,
+    // dianggap kemungkinan berasal dari tanggal lokal Indonesia
+    // yang tersimpan sebagai UTC.
+    //
+    // Maka digeser +7 jam (WIB).
+    if (utcHour < 12) {
+
+      // Tambahkan 7 jam dalam milidetik.
+      const wibMs = dateVal.getTime() + 7 * 60 * 60 * 1000;
+
+      // Buat objek Date baru setelah digeser ke WIB.
+      const wibDate = new Date(wibMs);
+
+      // Ambil komponen tanggal setelah konversi.
+      return {
+        year:  wibDate.getUTCFullYear(),
+        month: wibDate.getUTCMonth(),   // Januari = 0
+        day:   wibDate.getUTCDate(),
+      };
+    }
+
+    // Jika jam UTC sudah >= 12,
+    // dianggap sudah aman sehingga tidak perlu dikonversi lagi.
+    return {
+      year:  dateVal.getUTCFullYear(),
+      month: dateVal.getUTCMonth(),
+      day:   dateVal.getUTCDate(),
+    };
+  }
+
+  // ==============================
+  // CASE 3 : Parsing String YYYY-MM-DD
+  // ==============================
+  //
+  // Contoh:
+  // "2025-08-06"
+  //
+  // Regex mengambil:
+  // match[1] = tahun
+  // match[2] = bulan
+  // match[3] = tanggal
+  if (str) {
+
+    const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+    if (match) {
+      return {
+        year: parseInt(match[1]),
+
+        // JavaScript menggunakan index bulan:
+        // Januari = 0
+        // Februari = 1
+        // ...
+        // Desember = 11
+        month: parseInt(match[2]) - 1,
+
+        day: parseInt(match[3]),
+      };
+    }
+  }
+
+  // ==============================
+  // CASE 4 : Fallback
+  // ==============================
+  //
+  // Jika input bukan string YYYY-MM-DD
+  // maupun Date,
+  // coba paksa menjadi objek Date.
+  //
+  // Contoh:
+  // timestamp
+  // ISO string lain
+  // dll.
+  const d = new Date(dateVal);
+
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth(),
+    day: d.getUTCDate(),
+  };
+}
+
+function calcISOWeekYear(year: number, month: number, day: number): { week: number; isoYear: number } {
+  const d      = new Date(Date.UTC(year, month, day));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const isoYear   = d.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+  const week      = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return { week, isoYear };
+}
+
+function resolveWeekYear(record: any): { week: number; year: number } {
+
+  // Ambil komponen tanggal (year, month, day) dari record.date.
+  // parseDateLocal() akan menangani berbagai format input
+  // (string, Date, timestamp, dll).
+  const { year: rawYear, month, day } = parseDateLocal(record.date);
+
+  // Ambil nomor minggu dari database dan pastikan bertipe number.
+  const dbWeek = Number(record.week);
+
+  // ==========================================================
+  // CASE 1
+  // ==========================================================
+  // Jika tanggal berada di bulan Desember (month = 11)
+  // tetapi nomor minggu = 1,
+  //
+  // berarti minggu tersebut sebenarnya adalah
+  // Week 1 milik tahun berikutnya.
+  //
+  // Contoh:
+  //
+  // Tanggal : 2024-12-30
+  // Week    : 1
+  //
+  // Menurut ISO:
+  // Week 1 Tahun 2025
+  //
+  // Maka tahun ISO harus dinaikkan 1.
+  if (month === 11 && dbWeek === 1) {
+    return {
+      week: 1,
+      year: rawYear + 1,
+    };
+  }
+
+  // ==========================================================
+  // CASE 2
+  // ==========================================================
+  // Jika tanggal berada di bulan Januari (month = 0)
+  // tetapi nomor minggu = 52 atau 53,
+  //
+  // berarti minggu tersebut masih termasuk
+  // minggu terakhir tahun sebelumnya.
+  //
+  // Contoh:
+  //
+  // Tanggal : 2025-01-01
+  // Week    : 53
+  //
+  // Menurut ISO:
+  // Week 53 Tahun 2024
+  //
+  // Maka tahun ISO harus dikurangi 1.
+  if (month === 0 && (dbWeek === 52 || dbWeek === 53)) {
+    return {
+      week: dbWeek,
+      year: rawYear - 1,
+    };
+  }
+
+  // ==========================================================
+  // CASE 3
+  // ==========================================================
+  // Semua kondisi normal.
+  //
+  // Contoh:
+  //
+  // 2025-03-10 -> Week 11 Tahun 2025
+  // 2025-07-15 -> Week 29 Tahun 2025
+  //
+  // Tidak perlu penyesuaian tahun ISO.
+  return {
+    week: dbWeek,
+    year: rawYear,
+  };
+}
+
+function getCalendarYearsToFetch(isoYears: number[]): number[] {
+  const calYears = new Set<number>();
+  for (const isoYear of isoYears) {
+    calYears.add(isoYear - 1);
+    calYears.add(isoYear);
+    calYears.add(isoYear + 1);
+  }
+  return Array.from(calYears).sort((a, b) => a - b);
+}
+
+// ─── ISO week → date range ────────────────────────────────────────────────────
+function isoWeekToDateRange(
+  isoYear: number,
+  weekStart: number,
+  weekEnd: number,
+): { startDate: Date; endDate: Date } {
+
+  // Ambil tanggal 4 Januari pada ISO Year.
+  // Menurut standar ISO-8601, Week 1 adalah minggu yang mengandung tanggal 4 Januari.
+  const jan4 = new Date(Date.UTC(isoYear, 0, 4));
+
+  // Ambil hari dalam seminggu (UTC)
+  // getUTCDay():
+  //   0 = Minggu
+  //   1 = Senin
+  //   ...
+  //   6 = Sabtu
+  //
+  // ISO menggunakan:
+  //   1 = Senin
+  //   ...
+  //   7 = Minggu
+  //
+  // Maka jika hasilnya 0 (Minggu), ubah menjadi 7.
+  const jan4Day = jan4.getUTCDay() || 7;
+
+  // Salin objek Date agar jan4 tidak berubah.
+  const mondayW1 = new Date(jan4);
+
+  // Cari hari Senin pada ISO Week 1.
+  //
+  // Contoh:
+  // jan4 = Kamis (4)
+  //
+  //  Sen Sel Rab Kam
+  //   1   2   3   4
+  //
+  // Maka mundur 3 hari sehingga menjadi Senin.
+  mondayW1.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
+
+  // Copy tanggal Senin Week 1.
+  const startDate = new Date(mondayW1);
+
+  // Geser ke minggu awal yang diminta.
+  //
+  // weekStart = 1 -> tetap di Senin Week 1
+  // weekStart = 2 -> tambah 7 hari
+  // weekStart = 3 -> tambah 14 hari
+  startDate.setUTCDate(
+    mondayW1.getUTCDate() + (weekStart - 1) * 7
+  );
+
+  // Copy lagi untuk menghitung tanggal akhir.
+  const endDate = new Date(mondayW1);
+
+  // Geser ke minggu akhir.
+  //
+  // (weekEnd - 1) * 7 -> menuju Senin pada weekEnd
+  // +6                -> menjadi hari Minggu weekEnd
+  // +3                -> diperpanjang 3 hari (buffer aplikasi, bukan aturan ISO)
+  endDate.setUTCDate(
+    mondayW1.getUTCDate() + (weekEnd - 1) * 7 + 6 + 3
+  );
+
+  // Mundurkan tanggal awal 3 hari.
+  // Ini juga merupakan buffer aplikasi, bukan bagian dari standar ISO Week.
+  startDate.setUTCDate(startDate.getUTCDate() - 3);
+
+  // Debug hasil rentang tanggal.
+  console.log(
+    `\n isoWeekToDateRange: ISO ${isoYear} W${weekStart}-W${weekEnd}` +
+    `\n ${startDate.toISOString().slice(0, 10)} .. ${endDate.toISOString().slice(0, 10)}`,
+  );
+
+  // Kembalikan rentang tanggal.
+  return { startDate, endDate };
+}
+
+// ─── Streaming query dengan pg-cursor ────────────────────────────────────────
+async function streamSalesRecords(
+  filters: FetchFilters | undefined,
+  onBatch: (rows: any[]) => void,
+): Promise<void> {
+  const conditions: string[] = [];
+  const values: any[]        = [];
+
+  if (filters?.area && filters.area.trim().length > 0) {
+    values.push(filters.area.trim());
+    conditions.push(`area = $${values.length}`);
+  } else if (filters?.allowedAreas && filters.allowedAreas.length > 0) {
+    values.push(filters.allowedAreas);
+    conditions.push(`area = ANY($${values.length})`);
+  }
+
+  const dateConditions: string[] = [];
+
+  const addDateRange = (isoYear: number, weekStart: number, weekEnd: number) => {
+    const { startDate, endDate } = isoWeekToDateRange(isoYear, weekStart, weekEnd);
+    values.push(startDate.toISOString().slice(0, 10));
+    const idxStart = values.length;
+    values.push(endDate.toISOString().slice(0, 10));
+    const idxEnd = values.length;
+    dateConditions.push(`date BETWEEN $${idxStart} AND $${idxEnd}`);
+  };
+
+  if (filters?.year1 !== undefined) {
+    const ws = filters.weekStart1 ?? 1;
+    const we = filters.weekEnd1   ?? 53;
+    addDateRange(filters.year1, ws, we);
+    console.log(` year1=${filters.year1} W${ws}-W${we} → date range ditambahkan`);
+  }
+
+  if (filters?.year2 !== undefined && filters.year2 !== filters.year1) {
+    const ws = filters.weekStart2 ?? 1;
+    const we = filters.weekEnd2   ?? 53;
+    addDateRange(filters.year2, ws, we);
+    console.log(` year2=${filters.year2} W${ws}-W${we} → date range ditambahkan`);
+  }
+
+  if (dateConditions.length === 0 && filters?.year1 === undefined && filters?.year2 === undefined) {
+    console.warn('streamSalesRecords dipanggil tanpa year filter — fetch semua tanggal');
+  } else if (dateConditions.length > 0) {
+    conditions.push(`(${dateConditions.join(' OR ')})`);
+  }
+
+  if (filters?.product && filters.product.trim().length > 0) {
+    values.push(filters.product.trim());
+    conditions.push(`product = $${values.length}`);
+  }
+
+  if (filters?.city && filters.city.trim().length > 0) {
+    values.push(filters.city.trim());
+    conditions.push(`city = $${values.length}`);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  console.log(`\nstreamSalesRecords SQL conditions: ${conditions.join(' AND ') || '(none)'}`);
+
+  const query = `
+    SELECT
+      id, file_id, grand_total, week, date, product, category,
+      customer_no, customer, customer_type, salesman,
+      village, district, city, area,
+      units_bks, units_slop, units_bal, units_dos, omzet
+    FROM sales_records
+    ${whereClause}
+  `;
+
+  const client = await pool.connect();
+  try {
+    const cursor  = client.query(new Cursor(query, values));
+    let totalRows = 0;
+
+    while (true) {
+      const rows: any[] = await new Promise<any[]>((resolve, reject) => {
+        cursor.read(STREAM_BATCH_SIZE, (err: Error | null | undefined, result: any[]) => {
+          if (err) reject(err);
+          else resolve(result);
+        });
+      });
+
+      if (rows.length === 0) break;
+      totalRows += rows.length;
+      onBatch(rows);
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      cursor.close((err: Error | null) => (err ? reject(err) : resolve()));
+    });
+
+    console.log(`Streaming selesai: ${totalRows} records diproses`);
+  } finally {
+    client.release();
+  }
+}
+
+// ─── Query area targets ───────────────────────────────────────────────────────
+async function queryAreaTargets(areaId: string): Promise<{ [key: string]: number }> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT quarterly_targets FROM areas WHERE id = $1 LIMIT 1`,
+      [areaId]
+    );
+    if (result.rows.length > 0 && result.rows[0].quarterly_targets) {
+      return result.rows[0].quarterly_targets as { [key: string]: number };
+    }
+    return {};
+  } finally {
+    client.release();
+  }
+}
+
+interface ProductTargetRow {
+  product:    string;
+  units_dos:  number;
+  units_bks:  number;
+  units_slop: number;
+  units_bal:  number;
+}
+
+async function queryProductTargets(
+  areaId: string,
+  year:   number,
+): Promise<Map<string, ProductTargetRow>> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{
+      product:    string;
+      units_dos:  string;
+      units_bks:  string;
+      units_slop: string;
+      units_bal:  string;
+    }>(
+      `SELECT
+         product,
+         SUM(COALESCE(units_dos,  0)) AS units_dos,
+         SUM(COALESCE(units_bks,  0)) AS units_bks,
+         SUM(COALESCE(units_slop, 0)) AS units_slop,
+         SUM(COALESCE(units_bal,  0)) AS units_bal
+       FROM target_data
+       WHERE area        = $1
+         AND year        = $2
+         AND target_type = 'WEEKLY'
+         AND product     != 'DEFAULT_PRODUCT'
+       GROUP BY product`,
+      [areaId, year],
+    );
+
+    const map = new Map<string, ProductTargetRow>();
+    result.rows.forEach(r => {
+      map.set(r.product, {
+        product:    r.product,
+        units_dos:  parseFloat(r.units_dos)  || 0,
+        units_bks:  parseFloat(r.units_bks)  || 0,
+        units_slop: parseFloat(r.units_slop) || 0,
+        units_bal:  parseFloat(r.units_bal)  || 0,
+      });
+    });
+
+    console.log(`Product targets loaded: ${map.size} produk untuk area=${areaId} tahun=${year}`);
+    return map;
+  } finally {
+    client.release();
+  }
+}
+
+interface ProductQuarterTargetRow {
+  product:    string;
+  quarter:    number;
+  units_dos:  number;
+  units_bks:  number;
+  units_slop: number;
+  units_bal:  number;
+}
+
+async function queryProductQuarterTargets(
+  areaId: string,
+  year:   number,
+): Promise<Map<string, Map<number, ProductQuarterTargetRow>>> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{
+      product:    string;
+      quarter:    string;
+      units_dos:  string;
+      units_bks:  string;
+      units_slop: string;
+      units_bal:  string;
+    }>(
+      `SELECT
+         product,
+         quarter,
+         SUM(COALESCE(units_dos,  0)) AS units_dos,
+         SUM(COALESCE(units_bks,  0)) AS units_bks,
+         SUM(COALESCE(units_slop, 0)) AS units_slop,
+         SUM(COALESCE(units_bal,  0)) AS units_bal
+       FROM target_data
+       WHERE area        = $1
+         AND year        = $2
+         AND target_type = 'WEEKLY'
+         AND product     != 'DEFAULT_PRODUCT'
+       GROUP BY product, quarter
+       ORDER BY product, quarter`,
+      [areaId, year],
+    );
+
+    const map = new Map<string, Map<number, ProductQuarterTargetRow>>();
+    result.rows.forEach(r => {
+      const qNum = Number(r.quarter);
+      if (!map.has(r.product)) map.set(r.product, new Map());
+      map.get(r.product)!.set(qNum, {
+        product:    r.product,
+        quarter:    qNum,
+        units_dos:  parseFloat(r.units_dos)  || 0,
+        units_bks:  parseFloat(r.units_bks)  || 0,
+        units_slop: parseFloat(r.units_slop) || 0,
+        units_bal:  parseFloat(r.units_bal)  || 0,
+      });
+    });
+
+    return map;
+  } finally {
+    client.release();
+  }
+}
+
+// ─── Tipe internal untuk agregasi streaming ───────────────────────────────────
+interface UnitAgg {
+  bks:  number;
+  slop: number;
+  bal:  number;
+  dos:  number;
+}
+
+interface OutletAgg {
+  dozNet:       number;
+  unitsBks:     number;
+  unitsSlop:    number;
+  unitsBal:     number;
+  omzet:        number;
+  weeklyDozNet: Record<number, number>;
+  city:         string;
+  district:     string;
+  village:      string;
+  salesman:     string;
+  customer_no:  string;
+  year:         number;
+  outletType:   string;
+  category:     string;
+  product:      string;
+  customer:     string;
+  weekMin:      number;
+  weekMax:      number;
+}
+
+// ─── OPTIMASI v7: Pre-grouped Map untuk akses O(1) ───────────────────────────
+function buildByWeekMap(
+  weekProductMap: Map<string, UnitAgg>,
+): Map<number, Map<number, Map<string, UnitAgg>>> {
+  const byYear = new Map<number, Map<number, Map<string, UnitAgg>>>();
+
+  for (const [key, agg] of weekProductMap) {
+    const firstDash  = key.indexOf('-');
+    const secondDash = key.indexOf('-', firstDash + 1);
+    const year       = parseInt(key.slice(0, firstDash));
+    const week       = parseInt(key.slice(firstDash + 1, secondDash));
+    const product    = key.slice(secondDash + 1);
+
+    if (!byYear.has(year)) byYear.set(year, new Map());
+    const byWeek = byYear.get(year)!;
+    if (!byWeek.has(week)) byWeek.set(week, new Map());
+    byWeek.get(week)!.set(product, agg);
+  }
+
+  return byYear;
+}
+
+// ─── v9: Resolve area IDs untuk target query ─────────────────────────────────
+async function resolveTargetAreas(
+  areaId?:       string,
+  allowedAreas?: string[],
+): Promise<string[]> {
+  if (areaId && areaId.trim().length > 0) {
+    return [areaId.trim()];
+  }
+  if (allowedAreas && allowedAreas.length > 0) {
+    return allowedAreas;
+  }
+  const client = await pool.connect();
+  try {
+    const res = await client.query<{ id: string }>(`SELECT id FROM areas ORDER BY id`);
+    const ids  = res.rows.map(r => r.id);
+    console.log(`[resolveTargetAreas] Root all-area: ${ids.length} area ditemukan`);
+    return ids;
+  } finally {
+    client.release();
+  }
+}
+
+async function fetchPiutangData(filters?: FetchFilters): Promise<PiutangRecord[]> {
+  const conditions: string[] = [];
+  const values: any[] = [];
+ 
+  // Gunakan alias 'r.area' karena kita melakukan JOIN ke r (piutang_records)
+  if (filters?.area && filters.area.trim().length > 0) {
+    values.push(filters.area.trim());
+    conditions.push(`r.area = $${values.length}`);
+  } else if (filters?.allowedAreas && filters.allowedAreas.length > 0) {
+    values.push(filters.allowedAreas);
+    conditions.push(`r.area = ANY($${values.length})`);
+  }
+ 
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+ 
+  // JOIN dengan subquery untuk mengambil hanya file terbaru dari tiap area
+  const sql = `
+    SELECT
+      r.faktur,
+      r.kode,
+      r.outlet,
+      r.kota,
+      r.kecamatan,
+      r.kel_desa            AS "kelDesa",
+      COALESCE(r.salesman, '') AS salesman,
+      TO_CHAR(r.tanggal,     'DD-Mon-YYYY') AS tanggal,
+      TO_CHAR(r.jatuh_tempo, 'DD-Mon-YYYY') AS "jatuhTempo",
+      r.hari,
+      r.piutang::BIGINT     AS piutang,
+      r.giro::BIGINT        AS giro
+    FROM piutang_records r
+    JOIN (
+      -- Ambil ID file paling update untuk masing-masing area
+      SELECT DISTINCT ON (area) id
+      FROM piutang_files
+      ORDER BY area, uploaded_at DESC
+    ) latest_files ON r.file_id = latest_files.id
+    ${where}
+    ORDER BY r.hari DESC NULLS LAST, r.piutang DESC
+    LIMIT 10000
+  `;
+ 
+  const client = await pool.connect();
+  try {
+    const result = await client.query(sql, values);
+    return result.rows.map((r: any): PiutangRecord => ({
+      faktur:     r.faktur,
+      kode:       r.kode,
+      outlet:     r.outlet,
+      kota:       r.kota,
+      kecamatan:  r.kecamatan,
+      kelDesa:    r.kelDesa ?? '',
+      salesman:   r.salesman ?? '',
+      tanggal:    r.tanggal  ?? '',
+      jatuhTempo: r.jatuhTempo ?? '',
+      hari:       r.hari !== null ? Number(r.hari) : null,
+      piutang:    Number(r.piutang),
+      giro:       Number(r.giro),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export async function fetchSalesData(filters?: FetchFilters): Promise<SalesData> {
+  try {
+    console.log('fetchSalesData - Filter diterima:', JSON.stringify(filters));
+ 
+    // Jalankan parallel: sales records + piutang
+    const [salesResult, piutangList] = await Promise.all([
+      processSalesRecords(filters),
+      fetchPiutangData(filters),
+    ]);
+ 
+    console.log(`piutangList: ${piutangList.length} records`);
+ 
+    return {
+      ...salesResult,
+      piutangList,
+    };
+  } catch (error) {
+    console.error('Error fetching sales data:', error);
+    return {
+      weeklyData:       [],
+      quarterlyData:    generateEmptyQuarterlyData(),
+      QuarterlyYoYData: generateEmptyQuarterlyYoYData(),
+      weekComparisons:  [],
+      l4wc4wData:       generateEmptyL4WC4WData(),
+      yearOnYearGrowth: generateEmptyYearOnYearGrowth(),
+      comparisonYears:  { previousYear: null, currentYear: null },
+      comparisonWeeks:  generateEmptyComparisonWeeks(),
+      outletData:       [],
+      piutangList:      [],
+    };
+  }
+}
+
+
+// ─── OPTIMASI v8: Row types untuk parallel target queries ────────────────────
+interface WeekQuarterTargetRow {
+  week: string; quarter: string;
+  units_dos: string; units_bks: string; units_slop: string; units_bal: string;
+}
+interface ProductQuarterRawRow {
+  product: string; quarter: string;
+  units_dos: string; units_bks: string; units_slop: string; units_bal: string;
+}
+interface ProductWeekRawRow {
+  product: string; week: string;
+  units_dos: string; units_bks: string; units_slop: string; units_bal: string;
+}
+
+async function processSalesRecords(filters?: FetchFilters): Promise<SalesData> {
+  const areaId       = filters?.area;
+  const selectedUnit = filters?.selectedUnit || 'units_dos';
+
+  const clampWeek = (w: number) => Math.max(1, Math.min(52, w));
+
+  const year1 = filters?.year1;
+  const year2 = filters?.year2;
+
+  const preRangeYear1: { start: number; end: number } | null =
+    (filters?.weekStart1 !== undefined || filters?.weekEnd1 !== undefined)
+      ? { start: clampWeek(filters?.weekStart1 ?? 1), end: clampWeek(filters?.weekEnd1 ?? 52) }
+      : null;
+
+  const preRangeYear2: { start: number; end: number } | null =
+    (filters?.weekStart2 !== undefined || filters?.weekEnd2 !== undefined)
+      ? { start: clampWeek(filters?.weekStart2 ?? 1), end: clampWeek(filters?.weekEnd2 ?? 52) }
+      : null;
+
+  console.log(`\n [PRE-RANGE] year1=${year1} range=${preRangeYear1 ? `W${preRangeYear1.start}-W${preRangeYear1.end}` : 'all'}`);
+  // console.log(`   [PRE-RANGE] year2=${year2} range=${preRangeYear2 ? `W${preRangeYear2.start}-W${preRangeYear2.end}` : 'all'}`);
+
+  const weekProductMap     = new Map<string, UnitAgg>();
+  const weekYearSet        = new Map<number, Set<number>>();
+  const allProductsSet     = new Set<string>();
+  const outletAggMap       = new Map<string, OutletAgg>();
+  const yearUnitMap        = new Map<number, number>();
+  const omzetByProductWeek = new Map<string, number>();
+
+  let crossYearCount    = 0;
+  let totalRecordCount  = 0;
+  let filteredOutByWeek = 0;
+  let boundaryDosTotal  = 0;
+
+  const requestedISOYears = new Set<number>();
+  if (filters?.year1 !== undefined) requestedISOYears.add(filters.year1);
+  if (filters?.year2 !== undefined) requestedISOYears.add(filters.year2);
+
+  const isWeekInRange = (isoYear: number, isoWeek: number): boolean => {
+    if (isoYear === year1 && preRangeYear1 !== null) {
+      return isoWeek >= preRangeYear1.start && isoWeek <= preRangeYear1.end;
+    }
+    if (isoYear === year2 && preRangeYear2 !== null) {
+      return isoWeek >= preRangeYear2.start && isoWeek <= preRangeYear2.end;
+    }
+    return true;
+  };
+
+  const targetAreasPromise = resolveTargetAreas(filters?.area, filters?.allowedAreas);
+
+  const effectiveYearForTargets = year2 ?? year1;
+
+  const targetQueriesPromise: Promise<[
+    WeekQuarterTargetRow[],
+    ProductQuarterRawRow[],
+    ProductWeekRawRow[],
+  ] | null> = effectiveYearForTargets !== undefined
+    ? targetAreasPromise.then(targetAreas => {
+        if (targetAreas.length === 0) {
+          console.log(`[target] Tidak ada area untuk di-query target`);
+          return null;
+        }
+        console.log(`[target] Fetching untuk ${targetAreas.length} area: [${targetAreas.join(', ')}]`);
+        return Promise.all([
+          pool.connect().then(async client => {
+            try {
+              const res = await client.query<WeekQuarterTargetRow>(
+                `SELECT
+                   week, quarter,
+                   SUM(COALESCE(units_dos,  0)) AS units_dos,
+                   SUM(COALESCE(units_bks,  0)) AS units_bks,
+                   SUM(COALESCE(units_slop, 0)) AS units_slop,
+                   SUM(COALESCE(units_bal,  0)) AS units_bal
+                 FROM target_data
+                 WHERE area        = ANY($1)
+                   AND year        = $2
+                   AND target_type = 'WEEKLY'
+                 GROUP BY week, quarter
+                 ORDER BY week`,
+                [targetAreas, effectiveYearForTargets],
+              );
+              console.log(`[B1-parallel] Week×quarter targets: ${res.rows.length} rows`);
+              return res.rows;
+            } finally { client.release(); }
+          }),
+
+          pool.connect().then(async client => {
+            try {
+              const res = await client.query<ProductQuarterRawRow>(
+                `SELECT
+                   product, quarter,
+                   SUM(COALESCE(units_dos,  0)) AS units_dos,
+                   SUM(COALESCE(units_bks,  0)) AS units_bks,
+                   SUM(COALESCE(units_slop, 0)) AS units_slop,
+                   SUM(COALESCE(units_bal,  0)) AS units_bal
+                 FROM target_data
+                 WHERE area        = ANY($1)
+                   AND year        = $2
+                   AND target_type = 'WEEKLY'
+                   AND product     != 'DEFAULT_PRODUCT'
+                 GROUP BY product, quarter
+                 ORDER BY product, quarter`,
+                [targetAreas, effectiveYearForTargets],
+              );
+              console.log(`[B1-parallel] Product×quarter targets: ${res.rows.length} rows`);
+              return res.rows;
+            } finally { client.release(); }
+          }),
+
+          pool.connect().then(async client => {
+            try {
+              const res = await client.query<ProductWeekRawRow>(
+                `SELECT
+                   product, week,
+                   SUM(COALESCE(units_dos,  0)) AS units_dos,
+                   SUM(COALESCE(units_bks,  0)) AS units_bks,
+                   SUM(COALESCE(units_slop, 0)) AS units_slop,
+                   SUM(COALESCE(units_bal,  0)) AS units_bal
+                 FROM target_data
+                 WHERE area        = ANY($1)
+                   AND year        = $2
+                   AND target_type = 'WEEKLY'
+                   AND product     != 'DEFAULT_PRODUCT'
+                 GROUP BY product, week
+                 ORDER BY product, week`,
+                [targetAreas, effectiveYearForTargets],
+              );
+              console.log(`[B1-parallel] Product×week targets: ${res.rows.length} rows`);
+              return res.rows;
+            } finally { client.release(); }
+          }),
+        ]);
+      })
+    : Promise.resolve(null);
+
+  await Promise.all([
+    streamSalesRecords(filters, (batch) => {
+      for (const record of batch) {
+        totalRecordCount++;
+
+        const { month, day } = parseDateLocal(record.date);
+        const rawDbWeek      = Number(record.week);
+        const resolved       = resolveWeekYear(record);
+        const isoYear        = resolved.year;
+        const isoWeek        = resolved.week;
+        const rawDateYear    = parseDateLocal(record.date).year;
+
+        if ((month === 11 && day >= 28) || (month === 0 && day <= 3)) {
+          // console.log(`[BOUNDARY] date=${record.date} day=${day} month=${month+1} dbWeek=${rawDbWeek} → isoYear=${isoYear} isoWeek=${isoWeek} dos=${record.units_dos}`);
+        }
+
+        if (isoYear !== rawDateYear || isoWeek !== rawDbWeek) crossYearCount++;
+
+        if (requestedISOYears.size > 0 && !requestedISOYears.has(isoYear)) {
+          if ((month === 11 && day >= 28) || (month === 0 && day <= 3)) {
+            console.log(`[BOUNDARY-SKIP] isoYear=${isoYear} tidak ada di requestedISOYears=${[...requestedISOYears]}`);
+          }
+          continue;
+        }
+
+        if (!isWeekInRange(isoYear, isoWeek)) {
+          filteredOutByWeek++;
+          continue;
+        }
+
+        if (!weekYearSet.has(isoYear)) weekYearSet.set(isoYear, new Set());
+        weekYearSet.get(isoYear)!.add(isoWeek);
+
+        const product = record.product || 'Produk Tidak Diketahui';
+        allProductsSet.add(product);
+
+        const bks  = Number(record.units_bks)  || 0;
+        const slop = Number(record.units_slop) || 0;
+        const bal  = Number(record.units_bal)  || 0;
+        const dos  = Number(record.units_dos)  || 0;
+        const omz  = (() => {
+          const raw     = record.omzet;
+          const numeric = typeof raw === 'number' ? raw : parseFloat(raw ?? '0');
+          return Number.isFinite(numeric) ? numeric * OMZET_SCALE : 0;
+        })();
+
+        if ((month === 11 && day >= 28) || (month === 0 && day <= 3)) {
+          boundaryDosTotal += dos;
+          // console.log(`[BOUNDARY-AGG] wpKey=${isoYear}-${isoWeek}-${product} dos=${dos} runningTotal=${boundaryDosTotal}`);
+        }
+
+        const wpKey    = `${isoYear}-${isoWeek}-${product}`;
+        const existing = weekProductMap.get(wpKey);
+        if (existing) {
+          existing.bks  += bks;
+          existing.slop += slop;
+          existing.bal  += bal;
+          existing.dos  += dos;
+        } else {
+          weekProductMap.set(wpKey, { bks, slop, bal, dos });
+        }
+
+        omzetByProductWeek.set(wpKey, (omzetByProductWeek.get(wpKey) || 0) + omz);
+
+        const unitVal = selectedUnit === 'omzet'      ? omz
+                      : selectedUnit === 'units_bks'  ? bks
+                      : selectedUnit === 'units_slop' ? slop
+                      : selectedUnit === 'units_bal'  ? bal
+                      : dos;
+        yearUnitMap.set(isoYear, (yearUnitMap.get(isoYear) || 0) + unitVal);
+
+        const outletType  = record.customer_type || 'Tipe Customer tidak diketahui';
+        const category    = getProductCategory(product);
+        const customer    = record.customer    || 'Unknown';
+        const customer_no = record.customer_no || '';
+        let city     = (record.city     || '').trim() || 'Tidak diketahui';
+        let district = (record.district || '').trim() || 'Tidak diketahui';
+        const area   = (record.area     || '').trim();
+
+        if ((city === 'Unknown' || district === 'Unknown') && area.length > 0) {
+          if (area.includes(',')) {
+            const parts = area.split(',').map((p: string) => p.trim());
+            if (district === 'Unknown' && parts[0]) district = parts[0];
+            if (city     === 'Unknown' && parts[1]) city     = parts[1];
+          } else if (city === 'Unknown') {
+            city = area;
+          }
+        }
+
+        const village  = record.village  || 'Unknown';
+        const salesman = record.salesman || 'Unknown';
+
+        const customerKey = customer_no ? `${customer_no}||${customer}` : `||${customer}`;
+        const outletKey   = `${isoYear}|${outletType}|${category}|${product}|${customerKey}`;
+
+        const existingOutlet = outletAggMap.get(outletKey);
+        if (existingOutlet) {
+          existingOutlet.dozNet    += dos;
+          existingOutlet.unitsBks  += bks;
+          existingOutlet.unitsSlop += slop;
+          existingOutlet.unitsBal  += bal;
+          existingOutlet.omzet     += omz;
+          existingOutlet.weeklyDozNet[isoWeek] = (existingOutlet.weeklyDozNet[isoWeek] ?? 0) + dos;
+          if (isoWeek < existingOutlet.weekMin) existingOutlet.weekMin = isoWeek;
+          if (isoWeek > existingOutlet.weekMax) existingOutlet.weekMax = isoWeek;
+        } else {
+          outletAggMap.set(outletKey, {
+            dozNet: dos, unitsBks: bks, unitsSlop: slop, unitsBal: bal, omzet: omz,
+            weeklyDozNet: { [isoWeek]: dos },
+            city, district, village, salesman, customer_no,
+            year: isoYear, outletType, category, product, customer,
+            weekMin: isoWeek, weekMax: isoWeek,
+          });
+        }
+      }
+    }),
+    targetQueriesPromise,
+  ]);
+
+  console.log(`\n [STEP-1] Streaming selesai: ${totalRecordCount} total records`);
+  console.log(`   ISO cross-year remap: ${crossYearCount} records`);
+  console.log(`   Filtered out by week range: ${filteredOutByWeek} records`);
+  console.log(`   Records masuk agregasi: ${totalRecordCount - filteredOutByWeek} records`);
+  // console.log(`   [BOUNDARY] Total dos Des28+/Jan1-3 yang masuk agregasi: ${boundaryDosTotal}`);
+  console.log(`   outletAggMap size: ${outletAggMap.size}`);
+  console.log(`   weekProductMap size: ${weekProductMap.size}`);
+  console.log(`   allProductsSet size: ${allProductsSet.size}`);
+  console.log(`   Fetched ${totalRecordCount} records dari DB`);
+
+  if (totalRecordCount === 0) {
+    return {
+      weeklyData:       [],
+      quarterlyData:    generateEmptyQuarterlyData(),
+      QuarterlyYoYData: generateEmptyQuarterlyYoYData(),
+      weekComparisons:  [],
+      l4wc4wData:       generateEmptyL4WC4WData(),
+      yearOnYearGrowth: generateEmptyYearOnYearGrowth(),
+      comparisonYears:  { previousYear: null, currentYear: null },
+      comparisonWeeks:  generateEmptyComparisonWeeks(),
+      outletData:       [],
+    };
+  }
+
+  const sortedYears: number[] = [];
+  weekYearSet.forEach((_, year) => sortedYears.push(year));
+  sortedYears.sort((a, b) => a - b);
+
+  const currentYear  = filters?.year2  ?? sortedYears[sortedYears.length - 1];
+  const previousYear = filters?.year1  ?? (sortedYears.length > 1 ? sortedYears[sortedYears.length - 2] : currentYear);
+  const comparisonYears = {
+    previousYear: previousYear ?? null,
+    currentYear:  currentYear  ?? null,
+  };
+
+  const getWeekRangeFromData = (year: number): { start: number; end: number } | null => {
+    const weeks = weekYearSet.get(year);
+    if (!weeks || weeks.size === 0) return null;
+    let minWeek = Infinity;
+    let maxWeek = -Infinity;
+    weeks.forEach(w => {
+      if (w < minWeek) minWeek = w;
+      if (w > maxWeek) maxWeek = w;
+    });
+    if (!isFinite(minWeek)) return null;
+    return { start: minWeek, end: maxWeek };
+  };
+
+  const dataRangeYear1 = previousYear !== undefined ? getWeekRangeFromData(previousYear) : null;
+  const dataRangeYear2 = currentYear  !== undefined ? getWeekRangeFromData(currentYear)  : null;
+
+  const previousYearWeekRange: { start: number; end: number } | null =
+    previousYear !== undefined
+      ? (preRangeYear1 ?? dataRangeYear1 ?? { start: 1, end: 52 })
+      : null;
+
+  const currentYearWeekRange: { start: number; end: number } | null =
+    currentYear !== undefined
+      ? (preRangeYear2 ?? dataRangeYear2 ?? { start: 1, end: 52 })
+      : null;
+
+  console.log(`\n [STEP-2] Week ranges:`);
+  console.log(`   Data range year1=${previousYear}: [${dataRangeYear1?.start ?? '-'} - ${dataRangeYear1?.end ?? '-'}]`);
+  console.log(`   Data range year2=${currentYear}:  [${dataRangeYear2?.start ?? '-'} - ${dataRangeYear2?.end ?? '-'}]`);
+  console.log(`   Final range year1: [${previousYearWeekRange?.start ?? '-'} - ${previousYearWeekRange?.end ?? '-'}] ${preRangeYear1 ? '(dari filter)' : '(dari data)'}`);
+  console.log(`   Final range year2: [${currentYearWeekRange?.start ?? '-'} - ${currentYearWeekRange?.end ?? '-'}] ${preRangeYear2 ? '(dari filter)' : '(dari data)'}`);
+
+  const comparisonWeeks: ComparisonWeeks = {
+    previousYear: previousYearWeekRange,
+    currentYear:  currentYearWeekRange,
+  };
+
+  const getAgg = (year: number, week: number, product: string): UnitAgg =>
+    weekProductMap.get(`${year}-${week}-${product}`) ?? { bks: 0, slop: 0, bal: 0, dos: 0 };
+
+  const getUnitFromAgg = (agg: UnitAgg, wpKey?: string): number => {
+    if (selectedUnit === 'omzet' && wpKey) return omzetByProductWeek.get(wpKey) ?? 0;
+    if (selectedUnit === 'units_bks')  return agg.bks;
+    if (selectedUnit === 'units_slop') return agg.slop;
+    if (selectedUnit === 'units_bal')  return agg.bal;
+    return agg.dos;
+  };
+
+  const weeklyData: WeeklySales[]         = [];
+  const weekComparisons: WeekComparison[] = [];
+
+  const allWeeks = new Set<number>();
+  if (previousYear !== undefined) weekYearSet.get(previousYear)?.forEach(w => allWeeks.add(w));
+  if (currentYear  !== undefined) weekYearSet.get(currentYear)?.forEach(w  => allWeeks.add(w));
+
+  const sortedWeeks: number[] = [];
+  allWeeks.forEach(w => sortedWeeks.push(w));
+  sortedWeeks.sort((a, b) => a - b);
+
+  type ProductTotals = {
+    previous: number; current: number;
+    units_bks:  { previous: number; current: number };
+    units_slop: { previous: number; current: number };
+    units_bal:  { previous: number; current: number };
+    units_dos:  { previous: number; current: number };
+    omzet:      { previous: number; current: number };
+  };
+
+  const productTotalsMap = new Map<string, ProductTotals>();
+  allProductsSet.forEach(product => {
+    productTotalsMap.set(product, {
+      previous: 0, current: 0,
+      units_bks:  { previous: 0, current: 0 },
+      units_slop: { previous: 0, current: 0 },
+      units_bal:  { previous: 0, current: 0 },
+      units_dos:  { previous: 0, current: 0 },
+      omzet:      { previous: 0, current: 0 },
+    });
+  });
+
+  for (const week of sortedWeeks) {
+    productTotalsMap.forEach(t => {
+      t.previous = 0; t.current = 0;
+      t.units_bks.previous  = 0; t.units_bks.current  = 0;
+      t.units_slop.previous = 0; t.units_slop.current = 0;
+      t.units_bal.previous  = 0; t.units_bal.current  = 0;
+      t.units_dos.previous  = 0; t.units_dos.current  = 0;
+      t.omzet.previous      = 0; t.omzet.current      = 0;
+    });
+
+    let prevYearSales = 0;
+    let currYearSales = 0;
+
+    if (previousYear !== undefined && weekYearSet.get(previousYear)?.has(week)) {
+      for (const product of allProductsSet) {
+        const agg    = getAgg(previousYear, week, product);
+        const totals = productTotalsMap.get(product)!;
+        const wpKey  = `${previousYear}-${week}-${product}`;
+        const uval   = getUnitFromAgg(agg, wpKey);
+        totals.previous              += uval;
+        totals.units_bks.previous    += agg.bks;
+        totals.units_slop.previous   += agg.slop;
+        totals.units_bal.previous    += agg.bal;
+        totals.units_dos.previous    += agg.dos;
+        totals.omzet.previous        += omzetByProductWeek.get(wpKey) ?? 0;
+        prevYearSales                += uval;
+      }
+    }
+
+    if (currentYear !== undefined && weekYearSet.get(currentYear)?.has(week)) {
+      for (const product of allProductsSet) {
+        const agg    = getAgg(currentYear, week, product);
+        const totals = productTotalsMap.get(product)!;
+        const wpKey  = `${currentYear}-${week}-${product}`;
+        const uval   = getUnitFromAgg(agg, wpKey);
+        totals.current             += uval;
+        totals.units_bks.current   += agg.bks;
+        totals.units_slop.current  += agg.slop;
+        totals.units_bal.current   += agg.bal;
+        totals.units_dos.current   += agg.dos;
+        totals.omzet.current       += omzetByProductWeek.get(wpKey) ?? 0;
+        currYearSales              += uval;
+      }
+    }
+
+    const details: WeekComparisonProductDetail[] = [];
+    productTotalsMap.forEach((totals, product) => {
+      const variance           = totals.current - totals.previous;
+      const variancePercentage = totals.previous > 0 ? (variance / totals.previous) * 100 : 0;
+      details.push({
+        product,
+        previousYear: totals.previous,
+        currentYear:  totals.current,
+        variance,
+        variancePercentage,
+        units_bks:  { previous: totals.units_bks.previous,  current: totals.units_bks.current  },
+        units_slop: { previous: totals.units_slop.previous, current: totals.units_slop.current },
+        units_bal:  { previous: totals.units_bal.previous,  current: totals.units_bal.current  },
+        units_dos:  { previous: totals.units_dos.previous,  current: totals.units_dos.current  },
+        omzet:      { previous: totals.omzet.previous,      current: totals.omzet.current      },
+      });
+    });
+    details.sort((a, b) => b.currentYear - a.currentYear);
+
+    if (prevYearSales > 0 || currYearSales > 0) {
+      weekComparisons.push({
+        week,
+        previousYear:       prevYearSales,
+        currentYear:        currYearSales,
+        variance:           currYearSales - prevYearSales,
+        variancePercentage: prevYearSales > 0 ? ((currYearSales - prevYearSales) / prevYearSales) * 100 : 0,
+        details,
+      });
+    }
+
+    // Omzet murni minggu ini (independen dari selectedUnit), untuk card "Omzet 1 Bulan" di Piutang
+    const weekOmzetCurrent = currentYear !== undefined
+      ? Array.from(allProductsSet).reduce(
+          (s, p) => s + (omzetByProductWeek.get(`${currentYear}-${week}-${p}`) ?? 0), 0,
+        )
+      : 0;
+    const weekOmzetPrevious = previousYear !== undefined
+      ? Array.from(allProductsSet).reduce(
+          (s, p) => s + (omzetByProductWeek.get(`${previousYear}-${week}-${p}`) ?? 0), 0,
+        )
+      : 0;
+
+    if (currYearSales > 0 && currentYear !== undefined)
+      weeklyData.push({ week, year: currentYear,  sales: currYearSales, target: currYearSales * 1.1, omzetTotal: weekOmzetCurrent });
+    if (prevYearSales > 0 && previousYear !== undefined)
+      weeklyData.push({ week, year: previousYear, sales: prevYearSales, target: prevYearSales * 1.1, omzetTotal: weekOmzetPrevious });
+  }
+
+  console.log(`\n [STEP-4] outletAggMap size=${outletAggMap.size}`);
+
+  const outletData: OutletSalesData[] = [];
+  outletAggMap.forEach(agg => {
+    outletData.push({
+      week:         agg.weekMin,
+      year:         agg.year,
+      outletType:   agg.outletType,
+      category:     agg.category,
+      product:      agg.product,
+      dozNet:       agg.dozNet,
+      unitsBks:     agg.unitsBks,
+      unitsSlop:    agg.unitsSlop,
+      unitsBal:     agg.unitsBal,
+      omzet:        agg.omzet,
+      weeklyDozNet: agg.weeklyDozNet,
+      city:         agg.city,
+      district:     agg.district,
+      village:      agg.village,
+      customer:     agg.customer,
+      customer_no:  agg.customer_no,
+      salesman:     agg.salesman,
+    });
+  });
+  outletData.sort((a, b) => b.dozNet - a.dozNet);
+
+  console.log(`   outletData entries dikirim ke client: ${outletData.length}`);
+
+  const effectiveYear     = currentYear  ?? sortedYears[sortedYears.length - 1];
+  const effectivePrevYear = previousYear ?? (currentYear ?? sortedYears[0]);
+
+  const toFixed2 = (n: number) => Math.round(n * 100) / 100;
+
+  const yearOnYearGrowth: YearOnYearGrowth = (() => {
+    const prevTotal = yearUnitMap.get(effectivePrevYear) || 0;
+    const currTotal = yearUnitMap.get(effectiveYear)     || 0;
+    const variance  = currTotal - prevTotal;
+    return {
+      previousYearTotal:  toFixed2(prevTotal),
+      currentYearTotal:   toFixed2(currTotal),
+      variance:           toFixed2(variance),
+      variancePercentage: prevTotal > 0 ? Math.round((variance / prevTotal) * 100 * 10) / 10 : 0,
+    };
+  })();
+
+  const targetResults = await targetQueriesPromise;
+  const resolvedTargetAreas = await targetAreasPromise;
+
+  const byWeekMap = buildByWeekMap(weekProductMap);
+
+  const quarterlyData = await generateQuarterlyData(
+    byWeekMap,
+    omzetByProductWeek,
+    effectiveYear,
+    areaId,
+    filters?.selectedUnit,
+    targetResults,
+    resolvedTargetAreas,
+  );
+
+  const QuarterlyYoYData = await generateQuarterlyYoYData(
+    byWeekMap,
+    omzetByProductWeek,
+    effectiveYear,
+    effectivePrevYear,
+    areaId,
+    // filters?.selectedUnit
+  );
+
+  const l4wc4wData = generateL4WC4WData(
+    byWeekMap,
+    omzetByProductWeek,
+    currentYear,
+    filters,
+  );
+
+  return {
+    weeklyData,
+    quarterlyData,
+    QuarterlyYoYData,
+    weekComparisons,
+    l4wc4wData,
+    yearOnYearGrowth,
+    comparisonYears,
+    comparisonWeeks,
+    outletData,
+  };
+}
+
+// ─── generateQuarterlyData ────────────────────────────────────────────────────
+async function generateQuarterlyData(
+  byWeekMap:          Map<number, Map<number, Map<string, UnitAgg>>>,
+  omzetByProductWeek: Map<string, number>,
+  year:               number,
+  areaId?:            string,
+  selectedUnit?:      string,
+  preFetchedTargets?: [WeekQuarterTargetRow[], ProductQuarterRawRow[], ProductWeekRawRow[]] | null,
+  targetAreas?:       string[],
+): Promise<QuarterlyData[]> {
+  const quarters      = ['Q1', 'Q2', 'Q3', 'Q4'] as const;
+  const quarterlyData: QuarterlyData[] = [];
+  const unitType      = selectedUnit || 'units_dos';
+
+  const pickUnit = (agg: UnitAgg, wpKey?: string): number => {
+    if (unitType === 'omzet' && wpKey) return omzetByProductWeek.get(wpKey) ?? 0;
+    if (unitType === 'units_bks')  return agg.bks;
+    if (unitType === 'units_slop') return agg.slop;
+    if (unitType === 'units_bal')  return agg.bal;
+    return agg.dos;
+  };
+
+  const yearWeekMap = byWeekMap.get(year) ?? new Map<number, Map<string, UnitAgg>>();
+
+  const allProductsThisYear = new Set<string>();
+  yearWeekMap.forEach(prodMap => prodMap.forEach((_, p) => allProductsThisYear.add(p)));
+
+  interface WeekTargetRow {
+    week:       number;
+    quarter:    number;
+    units_dos:  number;
+    units_bks:  number;
+    units_slop: number;
+    units_bal:  number;
+    has_target: boolean;
+  }
+
+  const weekTargetMap        = new Map<number, WeekTargetRow>();
+  const productWeekTargetMap = new Map<string, Map<number, {
+    units_dos: number; units_bks: number; units_slop: number; units_bal: number;
+  }>>();
+  let productQuarterTargets  = new Map<string, Map<number, ProductQuarterTargetRow>>();
+
+  const effectiveTargetAreas: string[] =
+    targetAreas && targetAreas.length > 0
+      ? targetAreas
+      : areaId ? [areaId] : [];
+
+  if (effectiveTargetAreas.length > 0) {
+    let weekQuarterRows:    WeekQuarterTargetRow[]  = [];
+    let productQuarterRows: ProductQuarterRawRow[]  = [];
+    let productWeekRows:    ProductWeekRawRow[]      = [];
+
+    if (preFetchedTargets) {
+      [weekQuarterRows, productQuarterRows, productWeekRows] = preFetchedTargets;
+      console.log(`\n [B4] Menggunakan pre-fetched target data (${effectiveTargetAreas.length} area)`);
+    } else {
+      console.warn(`[B4] preFetchedTargets null — fallback ke serial queries`);
+      const client2 = await pool.connect();
+      try {
+        const [resWQ, resPQ, resPW] = await Promise.all([
+          client2.query<WeekQuarterTargetRow>(
+            `SELECT week, quarter,
+               SUM(COALESCE(units_dos,0)) AS units_dos, SUM(COALESCE(units_bks,0)) AS units_bks,
+               SUM(COALESCE(units_slop,0)) AS units_slop, SUM(COALESCE(units_bal,0)) AS units_bal
+             FROM target_data
+             WHERE area = ANY($1) AND year = $2 AND target_type = 'WEEKLY'
+             GROUP BY week, quarter ORDER BY week`,
+            [effectiveTargetAreas, year],
+          ),
+          client2.query<ProductQuarterRawRow>(
+            `SELECT product, quarter,
+               SUM(COALESCE(units_dos,0)) AS units_dos, SUM(COALESCE(units_bks,0)) AS units_bks,
+               SUM(COALESCE(units_slop,0)) AS units_slop, SUM(COALESCE(units_bal,0)) AS units_bal
+             FROM target_data
+             WHERE area = ANY($1) AND year = $2 AND target_type = 'WEEKLY'
+               AND product != 'DEFAULT_PRODUCT'
+             GROUP BY product, quarter ORDER BY product, quarter`,
+            [effectiveTargetAreas, year],
+          ),
+          client2.query<ProductWeekRawRow>(
+            `SELECT product, week,
+               SUM(COALESCE(units_dos,0)) AS units_dos, SUM(COALESCE(units_bks,0)) AS units_bks,
+               SUM(COALESCE(units_slop,0)) AS units_slop, SUM(COALESCE(units_bal,0)) AS units_bal
+             FROM target_data
+             WHERE area = ANY($1) AND year = $2 AND target_type = 'WEEKLY'
+               AND product != 'DEFAULT_PRODUCT'
+             GROUP BY product, week ORDER BY product, week`,
+            [effectiveTargetAreas, year],
+          ),
+        ]);
+        weekQuarterRows    = resWQ.rows;
+        productQuarterRows = resPQ.rows;
+        productWeekRows    = resPW.rows;
+      } finally {
+        client2.release();
+      }
+    }
+
+    weekQuarterRows.forEach(r => {
+      const dos = parseFloat(r.units_dos) || 0;
+      weekTargetMap.set(Number(r.week), {
+        week:       Number(r.week),
+        quarter:    Number(r.quarter),
+        units_dos:  dos,
+        units_bks:  parseFloat(r.units_bks)  || 0,
+        units_slop: parseFloat(r.units_slop) || 0,
+        units_bal:  parseFloat(r.units_bal)  || 0,
+        has_target: dos > 0,
+      });
+    });
+    console.log(`Week targets built: ${weekTargetMap.size} minggu`);
+
+    productQuarterRows.forEach(r => {
+      const qNum = Number(r.quarter);
+      if (!productQuarterTargets.has(r.product)) productQuarterTargets.set(r.product, new Map());
+      productQuarterTargets.get(r.product)!.set(qNum, {
+        product:    r.product,
+        quarter:    qNum,
+        units_dos:  parseFloat(r.units_dos)  || 0,
+        units_bks:  parseFloat(r.units_bks)  || 0,
+        units_slop: parseFloat(r.units_slop) || 0,
+        units_bal:  parseFloat(r.units_bal)  || 0,
+      });
+    });
+    console.log(`Product×quarter targets built: ${productQuarterTargets.size} produk`);
+
+    productWeekRows.forEach(r => {
+      const wNum = Number(r.week);
+      if (!productWeekTargetMap.has(r.product)) productWeekTargetMap.set(r.product, new Map());
+      productWeekTargetMap.get(r.product)!.set(wNum, {
+        units_dos:  parseFloat(r.units_dos)  || 0,
+        units_bks:  parseFloat(r.units_bks)  || 0,
+        units_slop: parseFloat(r.units_slop) || 0,
+        units_bal:  parseFloat(r.units_bal)  || 0,
+      });
+    });
+    console.log(`Product×week targets built: ${productWeekTargetMap.size} produk`);
+  }
+
+  type QuarterAccum = { dos: number; bks: number; slop: number; bal: number; weekCount: number };
+  const quarterTargetMap: Record<string, QuarterAccum> = {
+    Q1: { dos:0, bks:0, slop:0, bal:0, weekCount:0 },
+    Q2: { dos:0, bks:0, slop:0, bal:0, weekCount:0 },
+    Q3: { dos:0, bks:0, slop:0, bal:0, weekCount:0 },
+    Q4: { dos:0, bks:0, slop:0, bal:0, weekCount:0 },
+  };
+
+  weekTargetMap.forEach(r => {
+    if (!r.has_target) return;
+    const qKey = `Q${r.quarter}` as keyof typeof quarterTargetMap;
+    if (quarterTargetMap[qKey]) {
+      quarterTargetMap[qKey].dos  += r.units_dos;
+      quarterTargetMap[qKey].bks  += r.units_bks;
+      quarterTargetMap[qKey].slop += r.units_slop;
+      quarterTargetMap[qKey].bal  += r.units_bal;
+      quarterTargetMap[qKey].weekCount++;
+    }
+  });
+
+  const getMonthFromWeek = (week: number): string => {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const jan4    = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() || 7;
+    const startOfWeek1 = new Date(jan4);
+    startOfWeek1.setDate(jan4.getDate() - (jan4Day - 1));
+    const targetDate = new Date(startOfWeek1);
+    targetDate.setDate(startOfWeek1.getDate() + (week - 1) * 7);
+    return months[targetDate.getMonth()];
+  };
+
+  // ─── FIX v11: generateQuarterlyProductDetails ────────────────────────────
+  // Sebelumnya `omzet` per produk hanya dihitung saat unitType==='omzet' dan
+  // TIDAK pernah disertakan di field `omzet` pada setiap QuarterlyProductDetail.
+  // Akibatnya getDetailActual(d,'omzet') di QuarterlyAnalysis.tsx selalu balikin 0
+  // karena d.omzet selalu undefined — meski backend punya datanya di weekProductMap.
+  //
+  // Fix: hitung productOmzetActual SELALU (independen dari unitType), dan push
+  // sebagai omzet: { target: 0, actual: productOmzetActual } di setiap detail.
+  // Juga tambahkan omzet ke weeklyActuals per minggu agar filter kategori + omzet
+  // bisa menggunakan nilai terfilter (bukan wb.actual yang tidak terfilter).
+  const generateQuarterlyProductDetails = (
+    quarterIndex: number,
+    quarterWeeks: number[],
+  ): QuarterlyProductDetail[] => {
+    const qNum = quarterIndex + 1;
+
+    const productActualMap = new Map<string, {
+      units_dos: number; units_bks: number; units_slop: number; units_bal: number;
+    }>();
+
+    const productWeeklyMap = new Map<string, Map<number, {
+      units_dos: number; units_bks: number; units_slop: number; units_bal: number;
+    }>>();
+
+    for (const week of quarterWeeks) {
+      const prodMap = yearWeekMap.get(week);
+      if (!prodMap) continue;
+
+      prodMap.forEach((agg, product) => {
+        if (!productActualMap.has(product)) {
+          productActualMap.set(product, { units_dos:0, units_bks:0, units_slop:0, units_bal:0 });
+        }
+        const d = productActualMap.get(product)!;
+        d.units_dos  += agg.dos;
+        d.units_bks  += agg.bks;
+        d.units_slop += agg.slop;
+        d.units_bal  += agg.bal;
+
+        if (!productWeeklyMap.has(product)) productWeeklyMap.set(product, new Map());
+        const wm = productWeeklyMap.get(product)!;
+        const wd = wm.get(week) ?? { units_dos:0, units_bks:0, units_slop:0, units_bal:0 };
+        wd.units_dos  += agg.dos;
+        wd.units_bks  += agg.bks;
+        wd.units_slop += agg.slop;
+        wd.units_bal  += agg.bal;
+        wm.set(week, wd);
+      });
+    }
+
+    if (productActualMap.size === 0) {
+      allProductsThisYear.forEach(p => {
+        if (!productActualMap.has(p)) {
+          productActualMap.set(p, { units_dos:0, units_bks:0, units_slop:0, units_bal:0 });
+        }
+      });
+    }
+
+    const result: QuarterlyProductDetail[] = [];
+    productActualMap.forEach((actual, product) => {
+      const dbTarget   = productQuarterTargets.get(product)?.get(qNum);
+      const dosTarget  = dbTarget?.units_dos  ?? 0;
+      const bksTarget  = dbTarget?.units_bks  ?? 0;
+      const slopTarget = dbTarget?.units_slop ?? 0;
+      const balTarget  = dbTarget?.units_bal  ?? 0;
+
+      // ── FIX v11: hitung omzet per produk per kuartal SELALU,
+      //    bukan hanya saat unitType === 'omzet'. Ini yang sebelumnya
+      //    hilang sehingga d.omzet selalu undefined di frontend.
+      const productOmzetActual = quarterWeeks.reduce((sum, week) => {
+        return sum + (omzetByProductWeek.get(`${year}-${week}-${product}`) ?? 0);
+      }, 0);
+
+      const selectedActual = unitType === 'omzet'
+        ? productOmzetActual
+        : unitType === 'units_bks'  ? actual.units_bks
+        : unitType === 'units_slop' ? actual.units_slop
+        : unitType === 'units_bal'  ? actual.units_bal
+        : actual.units_dos;
+
+      const selectedTarget = unitType === 'omzet'      ? 0
+                           : unitType === 'units_bks'  ? bksTarget
+                           : unitType === 'units_slop' ? slopTarget
+                           : unitType === 'units_bal'  ? balTarget
+                           : dosTarget;
+
+      const variance           = selectedActual - selectedTarget;
+      const variancePercentage = selectedTarget > 0 ? (variance / selectedTarget) * 100 : 0;
+
+      // ── FIX v11: sertakan omzet per minggu di weeklyActuals ──────────
+      const weeklyActuals: Record<number, {
+        units_dos: number; units_bks: number; units_slop: number; units_bal: number; omzet: number;
+      }> = {};
+      productWeeklyMap.get(product)?.forEach((vals, week) => {
+        weeklyActuals[week] = {
+          units_dos:  parseFloat(vals.units_dos.toFixed(2)),
+          units_bks:  parseFloat(vals.units_bks.toFixed(2)),
+          units_slop: parseFloat(vals.units_slop.toFixed(2)),
+          units_bal:  parseFloat(vals.units_bal.toFixed(2)),
+          omzet:      parseFloat(
+            (omzetByProductWeek.get(`${year}-${week}-${product}`) ?? 0).toFixed(2)
+          ),
+        };
+      });
+
+      result.push({
+        product,
+        productCategory:    getProductCategory(product),
+        target:             parseFloat(selectedTarget.toFixed(2)),
+        actual:             parseFloat(selectedActual.toFixed(2)),
+        variance:           parseFloat(variance.toFixed(2)),
+        variancePercentage: parseFloat(variancePercentage.toFixed(1)),
+        units_bks:  { target: parseFloat(bksTarget.toFixed(2)),  actual: parseFloat(actual.units_bks.toFixed(2))  },
+        units_slop: { target: parseFloat(slopTarget.toFixed(2)), actual: parseFloat(actual.units_slop.toFixed(2)) },
+        units_bal:  { target: parseFloat(balTarget.toFixed(2)),  actual: parseFloat(actual.units_bal.toFixed(2))  },
+        units_dos:  { target: parseFloat(dosTarget.toFixed(2)),  actual: parseFloat(actual.units_dos.toFixed(2))  },
+        // ── FIX v11: field omzet sekarang selalu ada di setiap detail produk ──
+        omzet:      { target: 0, actual: parseFloat(productOmzetActual.toFixed(2)) },
+        weeklyActuals,
+      } as any);
+    });
+
+    return result;
+  };
+
+  console.log(`\n[generateQuarterlyData] year=${year}, total weekMap entries=${yearWeekMap.size}`);
+  [1,2,3,4].forEach(q => {
+    const s = (q-1)*13+1, e = Math.min(q*13, 52);
+    let cnt = 0;
+    for (let w = s; w <= e; w++) { if (yearWeekMap.has(w)) cnt++; }
+    console.log(`   Q${q} (W${s}-W${e}): ${cnt} minggu dengan data`);
+  });
+
+  for (let qIndex = 0; qIndex < quarters.length; qIndex++) {
+    const quarter   = quarters[qIndex];
+    const startWeek = qIndex * 13 + 1;
+    const endWeek   = Math.min((qIndex + 1) * 13, 52);
+    const qKey      = quarter;
+
+    const quarterWeeks: number[] = [];
+    for (let w = startWeek; w <= endWeek; w++) {
+      if (yearWeekMap.has(w)) quarterWeeks.push(w);
+    }
+
+    let quarterActual_dos  = 0;
+    let quarterActual_bks  = 0;
+    let quarterActual_slop = 0;
+    let quarterActual_bal  = 0;
+
+    for (const week of quarterWeeks) {
+      const prodMap = yearWeekMap.get(week)!;
+      prodMap.forEach(agg => {
+        quarterActual_dos  += agg.dos;
+        quarterActual_bks  += agg.bks;
+        quarterActual_slop += agg.slop;
+        quarterActual_bal  += agg.bal;
+      });
+    }
+
+    const qt     = quarterTargetMap[qKey];
+    const target = qt && qt.weekCount > 0 ? qt.dos : 0;
+
+    const quarterTargetForUnit = unitType === 'omzet'       ? 0
+                               : unitType === 'units_bks'  ? (qt?.bks  ?? 0)
+                               : unitType === 'units_slop' ? (qt?.slop ?? 0)
+                               : unitType === 'units_bal'  ? (qt?.bal  ?? 0)
+                               : target;
+
+    const quarterActual = unitType === 'omzet'
+      ? (() => {
+          let total = 0;
+          for (const week of quarterWeeks) {
+            const prodMap = yearWeekMap.get(week);
+            if (!prodMap) continue;
+            prodMap.forEach((_, product) => {
+              total += omzetByProductWeek.get(`${year}-${week}-${product}`) ?? 0;
+            });
+          }
+          return total;
+        })()
+      : unitType === 'units_bks'  ? quarterActual_bks
+      : unitType === 'units_slop' ? quarterActual_slop
+      : unitType === 'units_bal'  ? quarterActual_bal
+      : quarterActual_dos;
+
+    const details = generateQuarterlyProductDetails(qIndex, quarterWeeks);
+
+    const weeklyBreakdown: WeeklyBreakdown[] = [];
+    for (let week = startWeek; week <= endWeek; week++) {
+      const prodMap = yearWeekMap.get(week);
+
+      let weekActual_bks  = 0;
+      let weekActual_slop = 0;
+      let weekActual_bal  = 0;
+      let weekActual_dos  = 0;
+
+      if (prodMap) {
+        prodMap.forEach(agg => {
+          weekActual_bks  += agg.bks;
+          weekActual_slop += agg.slop;
+          weekActual_bal  += agg.bal;
+          weekActual_dos  += agg.dos;
+        });
+      }
+
+      const weekTargetRow = weekTargetMap.get(week);
+      const hasTarget     = weekTargetRow?.has_target ?? false;
+
+      const weekTarget_bks  = weekTargetRow?.units_bks  ?? 0;
+      const weekTarget_slop = weekTargetRow?.units_slop ?? 0;
+      const weekTarget_bal  = weekTargetRow?.units_bal  ?? 0;
+      const weekTarget_dos  = weekTargetRow?.units_dos  ?? 0;
+
+      const weekActual = unitType === 'omzet'
+        ? (() => {
+            const pm = yearWeekMap.get(week);
+            if (!pm) return 0;
+            let total = 0;
+            pm.forEach((_, product) => {
+              total += omzetByProductWeek.get(`${year}-${week}-${product}`) ?? 0;
+            });
+            return total;
+          })()
+        : unitType === 'units_bks'  ? weekActual_bks
+        : unitType === 'units_slop' ? weekActual_slop
+        : unitType === 'units_bal'  ? weekActual_bal
+        : weekActual_dos;
+
+      const weekTarget = unitType === 'omzet'       ? 0
+                       : unitType === 'units_bks'  ? weekTarget_bks
+                       : unitType === 'units_slop' ? weekTarget_slop
+                       : unitType === 'units_bal'  ? weekTarget_bal
+                       : weekTarget_dos;
+
+      const weekVariance    = weekActual - weekTarget;
+      const weekVariancePct = hasTarget && weekTarget > 0 ? (weekVariance / weekTarget) * 100 : 0;
+      const weekAchievement = hasTarget && weekTarget > 0
+        ? (weekActual / weekTarget) * 100
+        : weekActual > 0 ? -1 : 0;
+
+      weeklyBreakdown.push({
+        week,
+        target:             parseFloat(weekTarget.toFixed(2)),
+        actual:             parseFloat(weekActual.toFixed(2)),
+        variance:           parseFloat(weekVariance.toFixed(2)),
+        variancePercentage: parseFloat(weekVariancePct.toFixed(1)),
+        achievement:        parseFloat(weekAchievement.toFixed(1)),
+        units_bks:  { target: parseFloat(weekTarget_bks.toFixed(2)),  actual: parseFloat(weekActual_bks.toFixed(2))  },
+        units_slop: { target: parseFloat(weekTarget_slop.toFixed(2)), actual: parseFloat(weekActual_slop.toFixed(2)) },
+        units_bal:  { target: parseFloat(weekTarget_bal.toFixed(2)),  actual: parseFloat(weekActual_bal.toFixed(2))  },
+        units_dos:  { target: parseFloat(weekTarget_dos.toFixed(2)),  actual: parseFloat(weekActual_dos.toFixed(2))  },
+        hasTarget,
+      } as WeeklyBreakdown & { hasTarget: boolean });
+    }
+
+    const monthsInQuarter =
+      qIndex === 0 ? ['Jan', 'Feb', 'Mar'] :
+      qIndex === 1 ? ['Apr', 'May', 'Jun'] :
+      qIndex === 2 ? ['Jul', 'Aug', 'Sep'] :
+                     ['Oct', 'Nov', 'Dec'];
+
+    const wbByMonth = new Map<string, (WeeklyBreakdown & { hasTarget: boolean })[]>();
+    monthsInQuarter.forEach(m => wbByMonth.set(m, []));
+    for (const wb of weeklyBreakdown) {
+      const m = getMonthFromWeek(wb.week);
+      wbByMonth.get(m)?.push(wb as WeeklyBreakdown & { hasTarget: boolean });
+    }
+
+    const monthlyBreakdown: MonthlyBreakdown[] = monthsInQuarter.map(month => {
+      const monthWeeks = wbByMonth.get(month) ?? [];
+
+      const monthActual_bks  = monthWeeks.reduce((s, wb) => s + (wb.units_bks?.actual  ?? 0), 0);
+      const monthActual_slop = monthWeeks.reduce((s, wb) => s + (wb.units_slop?.actual ?? 0), 0);
+      const monthActual_bal  = monthWeeks.reduce((s, wb) => s + (wb.units_bal?.actual  ?? 0), 0);
+      const monthActual_dos  = monthWeeks.reduce((s, wb) => s + (wb.units_dos?.actual  ?? 0), 0);
+
+      const monthTarget_bks  = monthWeeks.reduce((s, wb) => s + (wb.units_bks?.target  ?? 0), 0);
+      const monthTarget_slop = monthWeeks.reduce((s, wb) => s + (wb.units_slop?.target ?? 0), 0);
+      const monthTarget_bal  = monthWeeks.reduce((s, wb) => s + (wb.units_bal?.target  ?? 0), 0);
+      const monthTarget_dos  = monthWeeks.reduce((s, wb) => s + (wb.units_dos?.target  ?? 0), 0);
+
+      const hasMonthTarget = monthWeeks.some(wb => wb.hasTarget === true);
+
+      const monthActual = unitType === 'omzet'
+        ? monthWeeks.reduce((s, wb) => s + (wb.actual ?? 0), 0)
+        : unitType === 'units_bks'  ? monthActual_bks
+        : unitType === 'units_slop' ? monthActual_slop
+        : unitType === 'units_bal'  ? monthActual_bal
+        : monthActual_dos;
+
+      const monthTarget = unitType === 'omzet'       ? 0
+                        : unitType === 'units_bks'  ? monthTarget_bks
+                        : unitType === 'units_slop' ? monthTarget_slop
+                        : unitType === 'units_bal'  ? monthTarget_bal
+                        : monthTarget_dos;
+
+      const monthVar    = monthActual - monthTarget;
+      const monthVarPct = hasMonthTarget && monthTarget > 0 ? (monthVar    / monthTarget) * 100 : 0;
+      const monthAch    = hasMonthTarget && monthTarget > 0 ? (monthActual / monthTarget) * 100 : 0;
+
+      return {
+        month,
+        target:             parseFloat(monthTarget.toFixed(2)),
+        actual:             parseFloat(monthActual.toFixed(2)),
+        variance:           parseFloat(monthVar.toFixed(2)),
+        variancePercentage: parseFloat(monthVarPct.toFixed(1)),
+        achievement:        parseFloat(monthAch.toFixed(1)),
+        units_bks:  { target: parseFloat(monthTarget_bks.toFixed(2)),  actual: parseFloat(monthActual_bks.toFixed(2))  },
+        units_slop: { target: parseFloat(monthTarget_slop.toFixed(2)), actual: parseFloat(monthActual_slop.toFixed(2)) },
+        units_bal:  { target: parseFloat(monthTarget_bal.toFixed(2)),  actual: parseFloat(monthActual_bal.toFixed(2))  },
+        units_dos:  { target: parseFloat(monthTarget_dos.toFixed(2)),  actual: parseFloat(monthActual_dos.toFixed(2))  },
+        hasTarget:  hasMonthTarget,
+      } as MonthlyBreakdown & { hasTarget: boolean };
+    });
+
+    quarterlyData.push({
+      quarter,
+      target:             parseFloat(quarterTargetForUnit.toFixed(2)),
+      actual:             parseFloat(quarterActual.toFixed(2)),
+      variance:           parseFloat((quarterActual - quarterTargetForUnit).toFixed(2)),
+      variancePercentage: quarterTargetForUnit > 0 ? parseFloat(((quarterActual - quarterTargetForUnit) / quarterTargetForUnit * 100).toFixed(1)) : 0,
+      details,
+      weeklyBreakdown,
+      monthlyBreakdown,
+    });
+  }
+
+  return quarterlyData;
+}
+
+// ─── generateQuarterlyYoYData ─────────────────────────────────────────────────
+// Versi "Actual vs Actual" dari generateQuarterlyData: previous = actual tahun
+// sebelumnya, current = actual tahun berjalan. Tidak perlu query target sama
+// sekali karena dua-duanya actual — cukup jumlahkan dari byWeekMap dua tahun.
+async function generateQuarterlyYoYData(
+  byWeekMap:          Map<number, Map<number, Map<string, UnitAgg>>>,
+  omzetByProductWeek: Map<string, number>,
+  currentYear:        number,
+  previousYear:       number,
+  selectedUnit?:      string,
+): Promise<QuarterlyYoYData[]> {
+  const quarters = ['Q1', 'Q2', 'Q3', 'Q4'] as const;
+  const unitType = selectedUnit || 'units_dos';
+
+  const prevYearWeekMap = byWeekMap.get(previousYear) ?? new Map<number, Map<string, UnitAgg>>();
+  const currYearWeekMap = byWeekMap.get(currentYear)  ?? new Map<number, Map<string, UnitAgg>>();
+
+  const pickUnit = (agg: UnitAgg, year: number, week: number, product: string): number => {
+    if (unitType === 'omzet') return omzetByProductWeek.get(`${year}-${week}-${product}`) ?? 0;
+    if (unitType === 'units_bks')  return agg.bks;
+    if (unitType === 'units_slop') return agg.slop;
+    if (unitType === 'units_bal')  return agg.bal;
+    return agg.dos;
+  };
+
+  const getMonthFromWeek = (week: number, year: number): string => {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const jan4    = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() || 7;
+    const startOfWeek1 = new Date(jan4);
+    startOfWeek1.setDate(jan4.getDate() - (jan4Day - 1));
+    const targetDate = new Date(startOfWeek1);
+    targetDate.setDate(startOfWeek1.getDate() + (week - 1) * 7);
+    return months[targetDate.getMonth()];
+  };
+
+  const emptyUnit = { previous: 0, current: 0 };
+
+  const result: QuarterlyYoYData[] = [];
+
+  for (let qIndex = 0; qIndex < quarters.length; qIndex++) {
+    const quarter   = quarters[qIndex];
+    const startWeek = qIndex * 13 + 1;
+    const endWeek   = Math.min((qIndex + 1) * 13, 52);
+
+    // ── Agregasi per-produk untuk kuartal ini, dua tahun sekaligus ──────────
+    const productMap = new Map<string, {
+      units_dos:  { previous: number; current: number };
+      units_bks:  { previous: number; current: number };
+      units_slop: { previous: number; current: number };
+      units_bal:  { previous: number; current: number };
+      omzet:      { previous: number; current: number };
+      weeklyPrevious: Record<number, { units_dos:number; units_bks:number; units_slop:number; units_bal:number; omzet:number }>;
+      weeklyCurrent:  Record<number, { units_dos:number; units_bks:number; units_slop:number; units_bal:number; omzet:number }>;
+    }>();
+
+    const ensureProduct = (product: string) => {
+      if (!productMap.has(product)) {
+        productMap.set(product, {
+          units_dos: { ...emptyUnit }, units_bks: { ...emptyUnit },
+          units_slop: { ...emptyUnit }, units_bal: { ...emptyUnit },
+          omzet: { ...emptyUnit },
+          weeklyPrevious: {}, weeklyCurrent: {},
+        });
+      }
+      return productMap.get(product)!;
+    };
+
+    for (let week = startWeek; week <= endWeek; week++) {
+      const prevProdMap = prevYearWeekMap.get(week);
+      if (prevProdMap) {
+        prevProdMap.forEach((agg, product) => {
+          const p    = ensureProduct(product);
+          const omz  = omzetByProductWeek.get(`${previousYear}-${week}-${product}`) ?? 0;
+          p.units_dos.previous  += agg.dos;
+          p.units_bks.previous  += agg.bks;
+          p.units_slop.previous += agg.slop;
+          p.units_bal.previous  += agg.bal;
+          p.omzet.previous      += omz;
+          p.weeklyPrevious[week] = {
+            units_dos: agg.dos, units_bks: agg.bks, units_slop: agg.slop, units_bal: agg.bal, omzet: omz,
+          };
+        });
+      }
+
+      const currProdMap = currYearWeekMap.get(week);
+      if (currProdMap) {
+        currProdMap.forEach((agg, product) => {
+          const p   = ensureProduct(product);
+          const omz = omzetByProductWeek.get(`${currentYear}-${week}-${product}`) ?? 0;
+          p.units_dos.current  += agg.dos;
+          p.units_bks.current  += agg.bks;
+          p.units_slop.current += agg.slop;
+          p.units_bal.current  += agg.bal;
+          p.omzet.current      += omz;
+          p.weeklyCurrent[week] = {
+            units_dos: agg.dos, units_bks: agg.bks, units_slop: agg.slop, units_bal: agg.bal, omzet: omz,
+          };
+        });
+      }
+    }
+
+    const details = Array.from(productMap.entries()).map(([product, p]) => ({
+      product,
+      productCategory: getProductCategory(product),
+      units_dos:  { previous: parseFloat(p.units_dos.previous.toFixed(2)),  current: parseFloat(p.units_dos.current.toFixed(2))  },
+      units_bks:  { previous: parseFloat(p.units_bks.previous.toFixed(2)),  current: parseFloat(p.units_bks.current.toFixed(2))  },
+      units_slop: { previous: parseFloat(p.units_slop.previous.toFixed(2)), current: parseFloat(p.units_slop.current.toFixed(2)) },
+      units_bal:  { previous: parseFloat(p.units_bal.previous.toFixed(2)),  current: parseFloat(p.units_bal.current.toFixed(2))  },
+      omzet:      { previous: parseFloat(p.omzet.previous.toFixed(2)),      current: parseFloat(p.omzet.current.toFixed(2))      },
+      weeklyPrevious: p.weeklyPrevious,
+      weeklyCurrent:  p.weeklyCurrent,
+    })) as any;
+
+    // ── Weekly breakdown per kuartal (previous vs current) ──────────────────
+    const weeklyBreakdown = [];
+    for (let week = startWeek; week <= endWeek; week++) {
+      let prevDos = 0, prevBks = 0, prevSlop = 0, prevBal = 0, prevOmz = 0;
+      let currDos = 0, currBks = 0, currSlop = 0, currBal = 0, currOmz = 0;
+
+      const prevProdMap = prevYearWeekMap.get(week);
+      if (prevProdMap) {
+        prevProdMap.forEach((agg, product) => {
+          prevDos += agg.dos; prevBks += agg.bks; prevSlop += agg.slop; prevBal += agg.bal;
+          prevOmz += omzetByProductWeek.get(`${previousYear}-${week}-${product}`) ?? 0;
+        });
+      }
+      const currProdMap = currYearWeekMap.get(week);
+      if (currProdMap) {
+        currProdMap.forEach((agg, product) => {
+          currDos += agg.dos; currBks += agg.bks; currSlop += agg.slop; currBal += agg.bal;
+          currOmz += omzetByProductWeek.get(`${currentYear}-${week}-${product}`) ?? 0;
+        });
+      }
+
+      const selPrev = unitType === 'omzet' ? prevOmz : unitType === 'units_bks' ? prevBks : unitType === 'units_slop' ? prevSlop : unitType === 'units_bal' ? prevBal : prevDos;
+      const selCurr = unitType === 'omzet' ? currOmz : unitType === 'units_bks' ? currBks : unitType === 'units_slop' ? currSlop : unitType === 'units_bal' ? currBal : currDos;
+      const variance    = selCurr - selPrev;
+      const variancePct = selPrev > 0 ? (variance / selPrev) * 100 : 0;
+
+      weeklyBreakdown.push({
+        week,
+        previous: parseFloat(selPrev.toFixed(2)),
+        current:  parseFloat(selCurr.toFixed(2)),
+        variance: parseFloat(variance.toFixed(2)),
+        variancePercentage: parseFloat(variancePct.toFixed(1)),
+        units_dos:  { previous: parseFloat(prevDos.toFixed(2)),  current: parseFloat(currDos.toFixed(2))  },
+        units_bks:  { previous: parseFloat(prevBks.toFixed(2)),  current: parseFloat(currBks.toFixed(2))  },
+        units_slop: { previous: parseFloat(prevSlop.toFixed(2)), current: parseFloat(currSlop.toFixed(2)) },
+        units_bal:  { previous: parseFloat(prevBal.toFixed(2)),  current: parseFloat(currBal.toFixed(2))  },
+      } as any);
+    }
+
+    // ── Monthly breakdown, di-derive dari weeklyBreakdown ────────────────────
+    const monthsInQuarter =
+      qIndex === 0 ? ['Jan', 'Feb', 'Mar'] :
+      qIndex === 1 ? ['Apr', 'May', 'Jun'] :
+      qIndex === 2 ? ['Jul', 'Aug', 'Sep'] :
+                     ['Oct', 'Nov', 'Dec'];
+
+    const wbByMonth = new Map<string, any[]>();
+    monthsInQuarter.forEach(m => wbByMonth.set(m, []));
+    for (const wb of weeklyBreakdown as any[]) {
+      const m = getMonthFromWeek(wb.week, currentYear);
+      wbByMonth.get(m)?.push(wb);
+    }
+
+    const monthlyBreakdown = monthsInQuarter.map(month => {
+      const mw = wbByMonth.get(month) ?? [];
+      const mPrevDos  = mw.reduce((s, wb) => s + (wb.units_dos?.previous  ?? 0), 0);
+      const mCurrDos  = mw.reduce((s, wb) => s + (wb.units_dos?.current   ?? 0), 0);
+      const mPrevBks  = mw.reduce((s, wb) => s + (wb.units_bks?.previous  ?? 0), 0);
+      const mCurrBks  = mw.reduce((s, wb) => s + (wb.units_bks?.current   ?? 0), 0);
+      const mPrevSlop = mw.reduce((s, wb) => s + (wb.units_slop?.previous ?? 0), 0);
+      const mCurrSlop = mw.reduce((s, wb) => s + (wb.units_slop?.current  ?? 0), 0);
+      const mPrevBal  = mw.reduce((s, wb) => s + (wb.units_bal?.previous  ?? 0), 0);
+      const mCurrBal  = mw.reduce((s, wb) => s + (wb.units_bal?.current   ?? 0), 0);
+      const mPrev     = mw.reduce((s, wb) => s + (wb.previous ?? 0), 0);
+      const mCurr     = mw.reduce((s, wb) => s + (wb.current  ?? 0), 0);
+      const mVar       = mCurr - mPrev;
+      const mVarPct     = mPrev > 0 ? (mVar / mPrev) * 100 : 0;
+
+      return {
+        month,
+        previous: parseFloat(mPrev.toFixed(2)),
+        current:  parseFloat(mCurr.toFixed(2)),
+        variance: parseFloat(mVar.toFixed(2)),
+        variancePercentage: parseFloat(mVarPct.toFixed(1)),
+        units_dos:  { previous: parseFloat(mPrevDos.toFixed(2)),  current: parseFloat(mCurrDos.toFixed(2))  },
+        units_bks:  { previous: parseFloat(mPrevBks.toFixed(2)),  current: parseFloat(mCurrBks.toFixed(2))  },
+        units_slop: { previous: parseFloat(mPrevSlop.toFixed(2)), current: parseFloat(mCurrSlop.toFixed(2)) },
+        units_bal:  { previous: parseFloat(mPrevBal.toFixed(2)),  current: parseFloat(mCurrBal.toFixed(2))  },
+      } as any;
+    });
+
+    // ── Total kuartal ─────────────────────────────────────────────────────
+    let quarterPrev = 0, quarterCurr = 0;
+    details.forEach((d: any) => {
+      const unitField = d[unitType] ?? d.units_dos;
+      quarterPrev += unitField.previous;
+      quarterCurr += unitField.current;
+    });
+    const quarterVar    = quarterCurr - quarterPrev;
+    const quarterVarPct = quarterPrev > 0 ? (quarterVar / quarterPrev) * 100 : 0;
+
+    result.push({
+      quarter,
+      previous: parseFloat(quarterPrev.toFixed(2)),
+      current:  parseFloat(quarterCurr.toFixed(2)),
+      variance: parseFloat(quarterVar.toFixed(2)),
+      variancePercentage: parseFloat(quarterVarPct.toFixed(1)),
+      details,
+      weeklyBreakdown,
+      monthlyBreakdown,
+    } as any);
+  }
+
+  return result;
+}
+
+// ─── generateL4WC4WData ───────────────────────────────────────────────────────
+function generateL4WC4WData(
+  byWeekMap:          Map<number, Map<number, Map<string, UnitAgg>>>,
+  omzetByProductWeek: Map<string, number>,
+  currentYear?:       number,
+  filters?:           FetchFilters,
+): L4WC4WData {
+  const empty: L4WC4WData = { l4wAverage: 0, c4wAverage: 0, c1wValue: 0, variance: 0, variancePercentage: 0, weeklyTrendData: [] };
+  const selectedUnit      = filters?.selectedUnit || 'units_dos';
+  const effectiveYear     = filters?.year2 ?? currentYear;
+
+  const yearWeekMap = effectiveYear !== undefined
+    ? (byWeekMap.get(effectiveYear) ?? new Map<number, Map<string, UnitAgg>>())
+    : (() => {
+        const merged = new Map<number, Map<string, UnitAgg>>();
+        byWeekMap.forEach(ywm => ywm.forEach((pm, w) => {
+          if (!merged.has(w)) merged.set(w, new Map());
+          pm.forEach((agg, p) => {
+            const ex = merged.get(w)!.get(p);
+            if (ex) { ex.bks += agg.bks; ex.slop += agg.slop; ex.bal += agg.bal; ex.dos += agg.dos; }
+            else merged.get(w)!.set(p, { ...agg });
+          });
+        }));
+        return merged;
+      })();
+
+  if (yearWeekMap.size === 0) return empty;
+
+  const weeklyTotalsMap = new Map<number, number>();
+
+  yearWeekMap.forEach((prodMap, week) => {
+    let weekTotal = 0;
+    prodMap.forEach((agg, product) => {
+      if (selectedUnit === 'omzet') {
+        weekTotal += omzetByProductWeek.get(`${effectiveYear}-${week}-${product}`) ?? 0;
+      } else {
+        weekTotal += selectedUnit === 'units_bks'  ? agg.bks
+                   : selectedUnit === 'units_slop' ? agg.slop
+                   : selectedUnit === 'units_bal'  ? agg.bal
+                   : agg.dos;
+      }
+    });
+    weeklyTotalsMap.set(week, (weeklyTotalsMap.get(week) ?? 0) + weekTotal);
+  });
+
+  const weeklyTotals: { week: number; total: number }[] = [];
+  weeklyTotalsMap.forEach((total, week) => weeklyTotals.push({ week, total }));
+  weeklyTotals.sort((a, b) => a.week - b.week);
+
+  if (weeklyTotals.length < 2) {
+    const c1wValue = weeklyTotals[weeklyTotals.length - 1]?.total ?? 0;
+    return { ...empty, c4wAverage: Math.round(c1wValue), c1wValue: Math.round(c1wValue) };
+  }
+
+  const c1wEntry = weeklyTotals[weeklyTotals.length - 1];
+  const c1wValue = c1wEntry.total;
+  const l4wWeeks = weeklyTotals.slice(Math.max(0, weeklyTotals.length - 5), weeklyTotals.length - 1);
+
+  if (l4wWeeks.length === 0) return { ...empty, c1wValue: Math.round(c1wValue) };
+
+  const l4wAverageRaw = l4wWeeks.reduce((sum, e) => sum + e.total, 0) / l4wWeeks.length;
+
+  let l4wMinWeek = Infinity;
+  let l4wMaxWeek = -Infinity;
+  l4wWeeks.forEach(w => {
+    if (w.week < l4wMinWeek) l4wMinWeek = w.week;
+    if (w.week > l4wMaxWeek) l4wMaxWeek = w.week;
+  });
+  const l4wWeekRange = l4wMinWeek === l4wMaxWeek
+    ? `Week ${l4wMinWeek}`
+    : `Week ${l4wMinWeek}-${l4wMaxWeek}`;
+
+  const weeklyTrendData: WeeklyTrendData[] = [
+    ...l4wWeeks.map((entry): WeeklyTrendData => ({
+      week:   `W${entry.week.toString().padStart(2, '0')}`,
+      value:  Math.round(entry.total),
+      period: 'L4W',
+    })),
+    {
+      week:   `W${c1wEntry.week.toString().padStart(2, '0')}`,
+      value:  Math.round(c1wValue),
+      period: 'C1W',
+    },
+  ];
+
+  const l4wWeekNums = l4wWeeks.map(w => w.week);
+
+  return {
+    l4wAverage:      Math.round(l4wAverageRaw),
+    c4wAverage:      0,
+    c1wValue:        Math.round(c1wValue),
+    variance:        0,
+    variancePercentage: 0,
+    weeklyTrendData,
+    l4wWeekRange,
+    c1wWeekNumber:   c1wEntry.week,
+    productDetails:  generateProductL4WC1WData(
+      yearWeekMap,
+      omzetByProductWeek,
+      effectiveYear,
+      c1wEntry.week,
+      l4wWeekNums,
+    ),
+  } as L4WC4WData;
+}
+
+// ─── generateProductL4WC1WData ────────────────────────────────────────────────
+// ── FIX v12: type WeekEntry sebelumnya punya field `units_omzet: number`
+//    yang tidak pernah diisi di object literal manapun di fungsi ini
+//    (dead field — bisa memicu TS error "missing property"). Dihapus karena
+//    nilai omzet sudah ditampung di field `omzet`, bukan `units_omzet`.
+function generateProductL4WC1WData(
+  yearWeekMap:        Map<number, Map<string, UnitAgg>>,
+  omzetByProductWeek: Map<string, number>,
+  effectiveYear:      number | undefined,
+  c1wWeek:            number,
+  l4wWeeks:           number[],
+): ProductL4WC1WData[] {
+  type WeekEntry = { omzet: number; units_bks: number; units_slop: number; units_bal: number; units_dos: number };
+
+  const productMap = new Map<string, Map<number, WeekEntry>>();
+
+  const relevantWeeks = new Set([...l4wWeeks, c1wWeek]);
+
+  relevantWeeks.forEach(week => {
+    const prodMap = yearWeekMap.get(week);
+    if (!prodMap) return;
+
+    prodMap.forEach((agg, product) => {
+      const omzetKey = `${effectiveYear}-${week}-${product}`;
+      const omzet    = omzetByProductWeek.get(omzetKey) ?? 0;
+
+      if (!productMap.has(product)) productMap.set(product, new Map());
+      const weekMap  = productMap.get(product)!;
+      const existing = weekMap.get(week) ?? { omzet: 0, units_bks: 0, units_slop: 0, units_bal: 0, units_dos: 0 };
+      weekMap.set(week, {
+        omzet:      existing.omzet      + omzet,
+        units_bks:  existing.units_bks  + agg.bks,
+        units_slop: existing.units_slop + agg.slop,
+        units_bal:  existing.units_bal  + agg.bal,
+        units_dos:  existing.units_dos  + agg.dos,
+      });
+    });
+  });
+
+  const fallbackEntry: WeekEntry = { omzet: 0, units_bks: 0, units_slop: 0, units_bal: 0, units_dos: 0 };
+  const year = effectiveYear ?? new Date().getFullYear();
+
+  const productData: ProductL4WC1WData[] = [];
+
+  for (const [product, weekMap] of productMap.entries()) {
+    const c1wData    = weekMap.get(c1wWeek) ?? fallbackEntry;
+    const l4wEntries = l4wWeeks
+      .map(w => weekMap.get(w))
+      .filter((d): d is WeekEntry => d !== undefined && d.omzet > 0);
+
+    const avg = (arr: WeekEntry[], key: keyof WeekEntry): number =>
+      l4wEntries.length > 0 ? arr.reduce((s, d) => s + (d[key] as number), 0) / arr.length : 0;
+    const sum = (arr: WeekEntry[], key: keyof WeekEntry): number =>
+      arr.reduce((s, d) => s + (d[key] as number), 0);
+
+    const l4wAvg: WeekEntry = {
+      omzet:      avg(l4wEntries, 'omzet'),
+      units_bks:  avg(l4wEntries, 'units_bks'),
+      units_slop: avg(l4wEntries, 'units_slop'),
+      units_bal:  avg(l4wEntries, 'units_bal'),
+      units_dos:  avg(l4wEntries, 'units_dos'),
+    };
+    const l4wTotal: WeekEntry = {
+      omzet:      sum(l4wEntries, 'omzet'),
+      units_bks:  sum(l4wEntries, 'units_bks'),
+      units_slop: sum(l4wEntries, 'units_slop'),
+      units_bal:  sum(l4wEntries, 'units_bal'),
+      units_dos:  sum(l4wEntries, 'units_dos'),
+    };
+
+    const variance           = c1wData.omzet - l4wAvg.omzet;
+    const variancePercentage = l4wAvg.omzet > 0 ? (variance / l4wAvg.omzet) * 100 : 0;
+
+    productData.push({
+      product,
+      year,
+      l4wValue:  Math.round(l4wAvg.omzet),
+      c1wValue:  Math.round(c1wData.omzet),
+      variance:  Math.round(variance),
+      variancePercentage: Math.round(variancePercentage * 10) / 10,
+      units_bks:  { l4w: Math.round(l4wAvg.units_bks   * 100) / 100, c1w: Math.round(c1wData.units_bks   * 100) / 100, l4wTotal: Math.round(l4wTotal.units_bks  * 100) / 100 },
+      units_slop: { l4w: Math.round(l4wAvg.units_slop  * 100) / 100, c1w: Math.round(c1wData.units_slop  * 100) / 100, l4wTotal: Math.round(l4wTotal.units_slop * 100) / 100 },
+      units_bal:  { l4w: Math.round(l4wAvg.units_bal   * 100) / 100, c1w: Math.round(c1wData.units_bal   * 100) / 100, l4wTotal: Math.round(l4wTotal.units_bal  * 100) / 100 },
+      units_dos:  { l4w: Math.round(l4wAvg.units_dos   * 100) / 100, c1w: Math.round(c1wData.units_dos   * 100) / 100, l4wTotal: Math.round(l4wTotal.units_dos  * 100) / 100 },
+      // ── FIX v12: c1w & l4wTotal sebelumnya salah baca dari `.units_dos`
+      //    (kemungkinan copy-paste). Sekarang konsisten baca dari `.omzet`,
+      //    sama seperti `l4w` yang sudah benar dari awal.
+      omzet:      { l4w: Math.round(l4wAvg.omzet * 100) / 100, c1w: Math.round(c1wData.omzet * 100) / 100, l4wTotal: Math.round(l4wTotal.omzet * 100) / 100 },
+    });
+  }
+  return productData.sort((a, b) => b.c1wValue - a.c1wValue);
+}
+
+// ─── Fallback empty data generators ──────────────────────────────────────────
+function generateEmptyQuarterlyData(): QuarterlyData[] {
+  return ['Q1', 'Q2', 'Q3', 'Q4'].map(quarter => ({
+    quarter, target: 0, actual: 0, variance: 0, variancePercentage: 0,
+    weeklyBreakdown: [], monthlyBreakdown: [],
+  }));
+}
+
+function generateEmptyQuarterlyYoYData(): QuarterlyYoYData[] {
+  return ['Q1', 'Q2', 'Q3', 'Q4'].map(quarter => ({
+    quarter, previous: 0, current: 0, variance: 0, variancePercentage: 0,
+  }));
+}
+
+function generateEmptyL4WC4WData(): L4WC4WData {
+  return { l4wAverage: 0, c4wAverage: 0, c1wValue: 0, variance: 0, variancePercentage: 0, weeklyTrendData: [], l4wWeekRange: '', c1wWeekNumber: 0 };
+}
+
+function generateEmptyYearOnYearGrowth(): YearOnYearGrowth {
+  return { previousYearTotal: 0, currentYearTotal: 0, variance: 0, variancePercentage: 0 };
+}
+
+function generateEmptyComparisonWeeks(): ComparisonWeeks {
+  return { previousYear: null, currentYear: null };
+}

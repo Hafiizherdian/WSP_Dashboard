@@ -22,7 +22,6 @@ import {
 } from 'recharts';
 import { ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 
-// ─── Theme — identik dengan tokens di page.tsx ────────────────────────────────
 type Theme = 'dark' | 'light';
 
 const TK = {
@@ -119,14 +118,14 @@ function useBreakpoint() {
   };
 }
 
-// ─── Unit key helper ─────────────────────────────────────────────────────────
+// Unit key helper
 type UnitKey = 'units_dos' | 'units_bal' | 'units_slop' | 'units_bks' | 'omzet';
 
 function getUnitData(p: any, unitKey: UnitKey): { l4w: number; c1w: number; l4wTotal?: number } {
   return p[unitKey] ?? { l4w: 0, c1w: 0, l4wTotal: undefined };
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// Sub-components
 
 function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   const t = TK[theme];
@@ -717,6 +716,7 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
   const setSelectedUnit = onUnitChange ?? setInternalSelectedUnit;
   const isOmzet         = selectedUnit === 'omzet';
   const [selectedCat,  setSelectedCat]  = useState('all');
+  const [selectedProduct, setSelectedProduct] = useState('all');
 
   const unitOptions: { value: UnitKey; label: string }[] = [
     { value: 'units_dos',  label: 'Jual (Dos Net)'  },
@@ -743,11 +743,29 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
     return Array.from(s).sort();
   }, [data.productDetails]);
 
-  // ── FIX: sortedDetails — semua unit key baca dari nested object ──────────
+  const availableProducts = useMemo(() => {
+    if (!data.productDetails) return [];
+    const s = new Set<string>();
+    data.productDetails.forEach(p => {
+      if (selectedCat !== 'all' && getProductCategory(p.product) !== selectedCat) return;
+      s.add(p.product);
+    });
+    return Array.from(s).sort();
+  }, [data.productDetails, selectedCat]);
+
+  // reset produk kalau kategori berubah dan produk lama sudah tidak ada di daftar
+  useEffect(() => {
+    if (selectedProduct !== 'all' && !availableProducts.includes(selectedProduct)) {
+      setSelectedProduct('all');
+    }
+  }, [availableProducts, selectedProduct]);
+
+  // FIX: sortedDetails — semua unit key baca dari nested object
   const sortedDetails = useMemo(() => {
     if (!data.productDetails) return [];
     let arr = data.productDetails;
     if (selectedCat !== 'all') arr = arr.filter(p => getProductCategory(p.product) === selectedCat);
+    if (selectedProduct !== 'all') arr = arr.filter(p => p.product === selectedProduct);
 
     return [...arr].map(p => {
       const ud = getUnitData(p, selectedUnit);
@@ -776,17 +794,17 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
       if (typeof av === 'string') return sort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
       return sort.dir === 'asc' ? av - bv : bv - av;
     });
-  }, [data.productDetails, selectedUnit, selectedCat, sort]);
+  }, [data.productDetails, selectedUnit, selectedCat, selectedProduct, sort]);
 
-  // ── FIX: chartData — selalu agregat dari productDetails[].units_xxx ──────
+  // FIX: chartData — selalu agregat dari productDetails[].units_xxx
   const chartData = useMemo(() => {
     let l4wTotal = 0;
     let c1wTotal = 0;
 
     data.productDetails?.forEach(p => {
       if (selectedCat !== 'all' && getProductCategory(p.product) !== selectedCat) return;
+      if (selectedProduct !== 'all' && p.product !== selectedProduct) return;
       const ud = getUnitData(p, selectedUnit);
-      // l4wTotal: gunakan field l4wTotal jika tersedia, fallback ke l4w * 4
       l4wTotal += ud.l4wTotal ?? (ud.l4w * 4);
       c1wTotal += ud.c1w;
     });
@@ -797,15 +815,15 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
       { period: 'L4W (Rata-rata)',  value: Math.round(l4wAvg   * 100) / 100, type: 'l4w' },
       { period: 'C1W (Minggu Ini)', value: Math.round(c1wTotal * 100) / 100, type: 'c1w' },
     ];
-  }, [data.productDetails, selectedUnit, selectedCat]);
+  }, [data.productDetails, selectedUnit, selectedCat, selectedProduct]);
 
-  // ── Summary values — derived dari chartData ───────────────────────────────
+  // Summary values — derived dari chartData
   const summaryValues = useMemo(() => ({
     l4wAvg: chartData[0].value,
     c1w:    chartData[1].value,
   }), [chartData]);
   
-  // ── trendData ─────────────────────────────────────────────────────────────
+  // trendData
   const trendData = useMemo(() => {
     if (!data.weeklyTrendData?.length) return [];
 
@@ -824,8 +842,9 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
     let filteredL4WTotal = 0;
 
     data.productDetails?.forEach(p => {
-      // Lewati produk yang tidak sesuai filter kategori
+      // Lewati produk yang tidak sesuai filter kategori/produk
       if (selectedCat !== 'all' && getProductCategory(p.product) !== selectedCat) return;
+      if (selectedProduct !== 'all' && p.product !== selectedProduct) return;
       
       const ud = getUnitData(p, selectedUnit);
       filteredC1W += ud.c1w;
@@ -846,9 +865,9 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
       
       return { ...tw, value: Math.round(finalValue * 100) / 100 };
     });
-  }, [data, selectedUnit, selectedCat]);
+  }, [data, selectedUnit, selectedCat, selectedProduct]);
 
-  // ── Card style ────────────────────────────────────────────────────────────
+  // Card style
   const card = (extra: React.CSSProperties = {}): React.CSSProperties => ({
     background:   t.cardBg,
     border:       `1px solid ${t.borderCard}`,
@@ -972,7 +991,7 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
     </div>
   );
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // Render
   return (
     <div style={{
       display:       'flex',
@@ -1007,7 +1026,7 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
         </p>
       </div> */}
 
-      {/* ── Filter card ── */}
+      {/* Filter card */}
       <div style={card()}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 8 : 10 }}>
           <span style={{
@@ -1019,7 +1038,7 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
           </span>
           <div style={{
             display:             'grid',
-            gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(2, auto)',
+            gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, auto)',
             gap:                 8,
             justifyContent:      isMobile ? 'stretch' : 'flex-start',
             alignItems:          'center',
@@ -1032,16 +1051,25 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
             </FilterSelect>
             <FilterSelect label="Kategori" accentColor="#8b5cf6" value={selectedCat}
               onChange={e => setSelectedCat(e.target.value)} theme={theme} fullWidth={isMobile}>
-              <option value="all" style={{ background: t.optionBg }}>Semua</option>
+              <option value="all" style={{ background: t.optionBg }}>Semua Kategori</option>
               {availableCategories.map(c => (
                 <option key={c} value={c} style={{ background: t.optionBg }}>{c}</option>
               ))}
             </FilterSelect>
+            <div style={{ gridColumn: isMobile ? '1 / -1' : undefined }}>
+              <FilterSelect label="Brand" accentColor="#ec4899" value={selectedProduct}
+                onChange={e => setSelectedProduct(e.target.value)} theme={theme} fullWidth={isMobile}>
+                <option value="all" style={{ background: t.optionBg }}>Semua Brand</option>
+                {availableProducts.map(p => (
+                  <option key={p} value={p} style={{ background: t.optionBg }}>{p}</option>
+                ))}
+              </FilterSelect>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Metric cards ── */}
+      {/* Metric cards */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: isMobile ? 10 : 14 }}>
         {[
           {
@@ -1086,7 +1114,7 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
         ))}
       </div>
 
-      {/* ── Charts ── */}
+      {/* Charts */}
       <div style={{
         display:             'grid',
         gridTemplateColumns: isMobile ? '1fr' : trendData.length > 0 ? '1fr 1fr' : '1fr',
@@ -1239,7 +1267,7 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
         )}
       </div>
 
-      {/* ── Detail Table ── */}
+      {/* Detail Table */}
       <div style={card()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Sans, sans-serif' }}>
@@ -1327,7 +1355,7 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
         )}
       </div>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       {expanded === 'bar' && (
         <Modal title="Perbandingan L4W vs C1W — Tampilan Diperbesar" onClose={() => setExpanded(null)} theme={theme}>
           <div style={{ marginBottom: 14 }}><BarLegend /></div>

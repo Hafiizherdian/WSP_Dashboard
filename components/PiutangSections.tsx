@@ -27,7 +27,7 @@ const tk = {
     tableHeadText: 'rgb(0, 0, 0)',
     tableAlt:    'rgba(255,255,255,0.015)',
     rowHover:    'rgba(255,255,255,0.04)',
-    text:        '#0f172a',
+    text:        'rgba(255,255,255,0.9)',
     textSub:     'rgba(255,255,255,0.52)',
     textMuted:   'rgba(255,255,255,0.28)',
     textFaint:   'rgba(255,255,255,0.13)',

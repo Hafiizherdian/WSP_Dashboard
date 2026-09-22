@@ -489,7 +489,7 @@ function ChartTooltip({ active, payload, label, theme, prefix = '', customerMap 
 function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
   const t = TK[theme];
   return (
-    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: active ? `${t.blue.text}22` : t.inputBg, color: active ? t.blue.text : t.textMuted, border: `1px solid ${active ? t.blue.text : t.borderInput}`, cursor: 'pointer', flexShrink: 0, transition: 'all .15s' }}>
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: active ? `${t.blue.text}22` : t.inputBg, color: active ? t.blue.text : t.text, border: `1px solid ${active ? t.blue.text : t.borderInput}`, cursor: 'pointer', flexShrink: 0, transition: 'all .15s' }}>
       {active
         ? <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><polyline points="1,12 5,7 8,9 11,4 15,2" /></svg>
         : <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="1" y="1" width="14" height="14" rx="2" /><line x1="1" y1="5.5" x2="15" y2="5.5" /><line x1="1" y1="10.5" x2="15" y2="10.5" /><line x1="5.5" y1="5.5" x2="5.5" y2="15" /></svg>
@@ -582,7 +582,7 @@ function ChartBox({ title, chartKey, height = 260, onExpand, year, theme, compac
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           {onToggleTable && <TableBtn onClick={onToggleTable} theme={theme} active={!!tableActive} />}
-          <button onClick={() => onExpand(chartKey, year)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: t.inputBg, color: t.textMuted, border: `1px solid ${t.borderInput}`, cursor: 'pointer', flexShrink: 0 }}>
+          <button onClick={() => onExpand(chartKey, year)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: t.inputBg, color: t.text, border: `1px solid ${t.borderInput}`, cursor: 'pointer', flexShrink: 0 }}>
             <Maximize2 size={9} /> Perbesar
           </button>
         </div>
@@ -605,8 +605,8 @@ function ExpandModal({ title, onClose, children, theme }: { title: string; onClo
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 99999, backgroundColor: t.modalOverlay, backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: t.modalBg, border: `1px solid ${t.modalBorder}`, borderRadius: 16, width: '100%', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.45)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg, flexShrink: 0, borderRadius: '16px 16px 0 0' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'IBM Plex Sans, sans-serif', color: t.text }}>{title}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg, color: t.tableHeadText, flexShrink: 0, borderRadius: '16px 16px 0 0' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'IBM Plex Sans, sans-serif', color: t.tableHeadText }}>{title}</span>
           <button onClick={onClose} style={{ background: t.inputBg, border: `1px solid ${t.borderInput}`, cursor: 'pointer', color: t.textMuted, padding: '5px 6px', borderRadius: 8, display: 'flex', alignItems: 'center' }}>
             <X size={16} />
           </button>
@@ -1237,33 +1237,12 @@ export default function OutletContributionSection({ data, theme: themeProp, sele
 }, [selectedUnit]);
 
   const getWeeklyUnitData = useCallback((r: OutletSalesData) => {
-    const dNet = r.weeklyDozNet ?? {};
-    if (selectedUnit === 'units_bal') {
-      const res: Record<string, number> = {};
-      Object.entries(dNet).forEach(([k, v]) => { res[k] = (v || 0) * 5; });
-      return res;
-    }
-    if (selectedUnit === 'units_slop') {
-      const res: Record<string, number> = {};
-      Object.entries(dNet).forEach(([k, v]) => { res[k] = (v || 0) * 50; });
-      return res;
-    }
-    if (selectedUnit === 'units_bks') {
-      const res: Record<string, number> = {};
-      Object.entries(dNet).forEach(([k, v]) => { res[k] = (v || 0) * 500; });
-      return res;
-    }
-    if (selectedUnit === 'omzet') {
-      const res: Record<string, number> = {};
-      const totalDoz = r.dozNet || 1;
-      const totalOmz = r.omzet || 0;
-      Object.entries(dNet).forEach(([k, v]) => {
-        res[k] = totalDoz > 0 ? ((v || 0) / totalDoz) * totalOmz : 0;
-      });
-      return res;
-    }
-    return dNet as any;
-  }, [selectedUnit]);
+  if (selectedUnit === 'units_bal')  return (r.weeklyUnitsBal  ?? {}) as Record<string, number>;
+  if (selectedUnit === 'units_slop') return (r.weeklyUnitsSlop ?? {}) as Record<string, number>;
+  if (selectedUnit === 'units_bks')  return (r.weeklyUnitsBks  ?? {}) as Record<string, number>;
+  if (selectedUnit === 'omzet')      return (r.weeklyOmzet     ?? {}) as Record<string, number>;
+  return (r.weeklyDozNet ?? {}) as Record<string, number>;
+}, [selectedUnit]);
 
   const raw = data?.outletData ?? [];
 
@@ -1338,18 +1317,36 @@ export default function OutletContributionSection({ data, theme: themeProp, sele
   const totalB = useMemo(() => dataB.reduce((s, r) => s + getUnitValue(r), 0), [dataB, getUnitValue]);
 
   const sharedWeekRange = useMemo(() => {
-    const allWeeks: number[] = [];
-    
-    dataA.forEach(r => { if (r.week != null) allWeeks.push(r.week); });
-    dataB.forEach(r => { if (r.week != null) allWeeks.push(r.week); });
+  const allWeeks: number[] = [];
 
-    if (allWeeks.length === 0) return { min: 1, max: 52 };
+  const collect = (rows: OutletSalesData[]) => {
+    rows.forEach(r => {
+      const wdn = r.weeklyDozNet;
+      const weekKeys = wdn ? Object.keys(wdn) : [];
+      if (weekKeys.length > 0) {
+        // Sumber kebenaran: breakdown mingguan asli (bisa mencakup banyak minggu
+        // walau baris ini sudah diagregasi jadi 1 row per customer+produk)
+        weekKeys.forEach(wkStr => {
+          const wk = Number(wkStr);
+          if (!Number.isNaN(wk)) allWeeks.push(wk);
+        });
+      } else if (r.week != null) {
+        // Fallback kalau baris tidak punya weeklyDozNet sama sekali
+        allWeeks.push(r.week);
+      }
+    });
+  };
 
-    return {
-      min: allWeeks.reduce((prev, curr) => (curr < prev ? curr : prev), allWeeks[0]),
-      max: allWeeks.reduce((prev, curr) => (curr > prev ? curr : prev), allWeeks[0])
-    };
-  }, [dataA, dataB]);
+  collect(dataA);
+  collect(dataB);
+
+  if (allWeeks.length === 0) return { min: 1, max: 52 };
+
+  return {
+    min: allWeeks.reduce((prev, curr) => (curr < prev ? curr : prev), allWeeks[0]),
+    max: allWeeks.reduce((prev, curr) => (curr > prev ? curr : prev), allWeeks[0]),
+  };
+}, [dataA, dataB]);
 
   const hasDropdownFilter = [selOutlet, selCat, selProduct, selCity, selDistrict, selSalesman].some(v => v !== 'all') || !!selCustomerNo;
   const hasFilter = hasDropdownFilter || !!globalSearch;

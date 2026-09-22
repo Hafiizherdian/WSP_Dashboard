@@ -12,6 +12,7 @@ import csv from 'csv-parser';
 import { createReadStream } from 'fs';
 import * as XLSX from 'xlsx';
 import { withAuth } from '@/lib/auth/session';
+import { invalidateAll } from '@/lib/salesCache';
 
 export async function POST(request: NextRequest) {
   return withAuth(request, 'upload_file', async (session) => {
@@ -159,6 +160,8 @@ export async function POST(request: NextRequest) {
           ]);
 
           await client.query('COMMIT');
+
+          invalidateAll();
 
           return NextResponse.json({
             success: true,

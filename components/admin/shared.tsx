@@ -192,7 +192,7 @@ export function StatCard({ label, value, cardKey, icon: Icon, sub, trend, theme 
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingTop: 6, borderTop: `1px solid ${t.border}` }}>
           {trend === 'up'      && <span style={{ fontSize: 10, color: t.green.text, fontFamily: FONT_MONO, fontWeight: 600 }}>↑ Naik dari bulan lalu</span>}
           {trend === 'down'    && <span style={{ fontSize: 10, color: t.red.text,   fontFamily: FONT_MONO, fontWeight: 600 }}>↓ Turun dari bulan lalu</span>}
-          {trend === 'neutral' && <span style={{ fontSize: 10, color: t.textMuted,  fontFamily: FONT_MONO }}>Tidak ada perubahan</span>}
+          {trend === 'neutral' && <span style={{ fontSize: 10, color: t.textMuted,  fontFamily: FONT_MONO }}></span>}
         </div>
       )}
     </div>

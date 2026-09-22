@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef, createContext } from 'react';
+import { createPortal } from 'react-dom';
 import WeekComparison from '@/components/WeekComparison';
 import QuarterlyAnalysis from '@/components/QuarterlyAnalysis';
+import QuarterlyAnalysisYearly from '@/components/QuarterlyAnalysisYearly';
 import L4WC4WAnalysis from '@/components/L4WC4WAnalysis';
 import YearOnYearGrowth from '@/components/YearOnYearGrowth';
 import AnalysisSection from '@/components/AnalysisSection';
@@ -11,11 +13,12 @@ import DistributionSection from '@/components/DistributionSection';
 import PiutangComponent from '@/components/PiutangSections';
 import { SalesData } from '@/types/sales';
 import { AreaConfig } from '@/lib/areaConfig';
+import { RegionConfig, getAccessibleRegions } from '@/lib/regionConfig';
 import { useAuth, AuthProvider } from '@/lib/auth/AuthContext';
 import { UserRole } from '@/lib/auth/types';
 import { getProductCategory } from '@/lib/productCategories';
 import {
-  TrendingUp, Calendar, BarChart3, PieChart,
+  TrendingUp, Calendar, BarChart3,CalendarDays, PieChart,Calendars,
   Activity, FileText, Store, Sun, Moon,
   ChevronLeft, Filter, X, LogOut,
   ShieldAlert, ShieldCheck, Shield,
@@ -114,8 +117,6 @@ const fmtUF = (v:number) => {
 };
 const fmtRp = (v:number) =>
   v >= 1e9  ? `Rp ${(v/1e9).toFixed(1)}M`
-  // : v >= 1e6 ? `Rp ${(v/1e6).toFixed(1)}jt`
-  // : v >= 1e3 ? `Rp ${(v/1e3).toFixed(0)}rb`
   : `Rp ${Math.round(v)}`;
 
 function getDetailUnitValue(d: any, unit: string, field: 'actual' | 'target'): number {
@@ -158,7 +159,7 @@ function SessionGuard({ children }:{ children:React.ReactNode }) {
 
   if (loading || !user) return (
     <div style={{
-      minHeight: '100vh', background: '#07090e',
+      minHeight: '100dvh', background: '#07090e',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       flexDirection: 'column', gap: 0,
       fontFamily: 'IBM Plex Mono, monospace',
@@ -228,7 +229,8 @@ function ThemeToggle({ theme, setTheme, compact=false }:{ theme:Theme; setTheme:
 const TABS=[
   {id:'overview',      label:'Ringkasan',       shortLabel:'Ringkasan',  Icon:NotepadTextDashed},
   {id:'weekly',        label:'Mingguan',        shortLabel:'Mingguan',   Icon:Calendar  },
-  {id:'quarterly',     label:'Kuartal',         shortLabel:'Kuartal',    Icon:BarChart3 },
+  {id:'quarterly',     label:'Kuartal Target',  shortLabel:'Kuartal',    Icon:CalendarDays },
+  {id:'quarterly2',    label:'Kuartal Aktual',  shortLabel:'Kuartal',    Icon:Calendars },
   {id:'l4wc4w',        label:'L4W vs C1W',      shortLabel:'L4W',        Icon:Activity  },
   {id:'yoy',           label:'YoY Growth',      shortLabel:'YoY',        Icon:PieChart  },
   {id:'outlet',        label:'Outlet',          shortLabel:'Outlet',     Icon:Store     },
@@ -271,8 +273,8 @@ function Sidebar({ activeTab, setActiveTab, collapsed, setCollapsed, theme, setT
           const active=activeTab===id;
           return (
             <button key={id} onClick={()=>setActiveTab(id)} title={collapsed?label:undefined}
-              style={{display:'flex',alignItems:'center',gap:8,width:'100%',minHeight:33,padding:collapsed?'5px 0':'5px 8px',borderRadius:7,border:'none',cursor:'pointer',justifyContent:collapsed?'center':'flex-start',background:active?t.navActiveBg:'transparent',color:active?t.navActiveText:t.textNav,fontSize:12,fontWeight:active?600:400,fontFamily:'IBM Plex Sans,sans-serif',transition:'all 0.12s',marginBottom:1,position:'relative'}}>
-              <Icon size={13} color={active?t.navActiveText:t.textMuted}/>
+              style={{display:'flex',alignItems:'center',gap:8,width:'100%',minHeight:33,padding:collapsed?'5px 0':'5px 8px',borderRadius:7,border:'none',cursor:'pointer',justifyContent:collapsed?'center':'flex-start',background:active?t.navActiveBg:'transparent',color:active?t.navActiveText:t.text,fontSize:12,fontWeight:active?600:400,fontFamily:'IBM Plex Sans,sans-serif',transition:'all 0.12s',marginBottom:1,position:'relative'}}>
+              <Icon size={13} color={active?t.navActiveText:t.text}/>
               {!collapsed&&<span style={{flex:1,textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>}
               {active&&<span style={{position:'absolute',left:0,top:'20%',bottom:'20%',width:2,borderRadius:'0 2px 2px 0',background:t.navActiveDot}}/>}
             </button>
@@ -282,7 +284,7 @@ function Sidebar({ activeTab, setActiveTab, collapsed, setCollapsed, theme, setT
       <div style={{padding:collapsed?'8px 4px':'8px',borderTop:`1px solid ${t.border}`,flexShrink:0,display:'flex',flexDirection:'column',gap:5,alignItems:collapsed?'center':'stretch'}}>
         {collapsed ? (
           <>
-            <button onClick={()=>setTheme(theme==='dark'?'light':'dark')} style={{background:'none',border:'none',cursor:'pointer',color:t.textMuted,borderRadius:7,width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center'}}>{theme==='dark'?<Sun size={13}/>:<Moon size={13}/>}</button>
+            <button onClick={()=>setTheme(theme==='dark'?'light':'dark')} style={{background:'none',border:'none',cursor:'pointer',color:t.text,borderRadius:7,width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center'}}>{theme==='dark'?<Sun size={13}/>:<Moon size={13}/>}</button>
             <button onClick={logout} style={{background:t.red.bg,border:`1px solid ${t.red.border}`,cursor:'pointer',borderRadius:7,width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center'}}><LogOut size={12} color={t.red.text}/></button>
           </>
         ) : (
@@ -361,7 +363,9 @@ function Sel({ value, onChange, options, theme, style }:{ value:string|number; o
 function DesktopFilterBar({
   y1,sY1,wStart1,sWStart1,w1,sW1,
   y2,sY2,wStart2,sWStart2,w2,sW2,
-  af,sAf,areas,onApply,onReset,loading,theme,
+  af,sAf,areas,
+  rf,sRf,regions,canRegional,
+  onApply,onReset,loading,theme,
   sSelectedUnit,
   selectedUnit,
   unapplied,
@@ -373,17 +377,18 @@ function DesktopFilterBar({
   wStart2:number; sWStart2:(v:number)=>void;
   w2:number; sW2:(v:number)=>void;
   af:string; sAf:(v:string)=>void; areas:AreaConfig[];
+  rf:string; sRf:(v:string)=>void; regions:RegionConfig[]; canRegional:boolean;
   selectedUnit:string; sSelectedUnit:(v:string)=>void;
   unapplied:boolean; // ← beda dari snapshot terakhir yang sukses di-fetch (untuk warning)
   onApply:()=>void; onReset:()=>void; loading:boolean; theme:Theme;
 
 }) {
   const t=tk[theme];
-  // "dirty" = beda dari DEFAULT (untuk tombol Reset). FIX: sebelumnya pakai !!selectedUnit
-  // yang selalu true karena default-nya 'units_dos' (bukan string kosong).
-  const dirty = wStart1!==0 || w1!==0 || wStart2!==0 || w2!==0 || !!af || selectedUnit!=='units_dos';
+  // "dirty" = beda dari DEFAULT (untuk tombol Reset).
+  const dirty = wStart1!==0 || w1!==0 || wStart2!==0 || w2!==0 || !!af || !!rf || selectedUnit!=='units_dos';
   const yO=YEARS.map(y=>({value:y,label:String(y)}));
   const aO=[{value:'',label:'Semua Area'},...areas.map(a=>({value:a.id,label:a.name}))];
+  const rO=[{value:'',label:'Semua Regional'},...regions.map(r=>({value:r.id,label:r.name}))];
 
   // weekStart options: hanya tampilkan minggu <= weekEnd (jika weekEnd sudah dipilih)
   const wStartOpts = (end: number) => [
@@ -399,14 +404,6 @@ function DesktopFilterBar({
 
   const Sep=()=><div style={{width:1,height:12,background:t.border,margin:'0 1px',flexShrink:0}}/>;
   const Lbl=({c}:{c:string})=><span style={{fontSize:8,fontWeight:700,color:t.textFaint,fontFamily:'monospace',textTransform:'uppercase',letterSpacing:'0.1em',flexShrink:0}}>{c}</span>;
-
-  const [dotStep, setDotStep] = useState(0);
-  useEffect(() => {
-    if (loading) {
-      const id = setInterval(() => setDotStep(s => (s + 1) % 3), 400);
-      return () => clearInterval(id);
-    }
-  }, [loading]);
 
   return (
     <div style={{flexShrink:0,background:t.filterbg,borderBottom:`1px solid ${t.border}`}}>
@@ -472,6 +469,15 @@ function DesktopFilterBar({
         <Lbl c="Area"/>
         <Sel value={af} onChange={v=>sAf(String(v))} options={aO} theme={theme} style={{minWidth:106}}/>
 
+        {/* Dropdown Regional — hanya untuk user yang boleh pakai filter regional */}
+        {canRegional && (
+          <>
+            <Sep/>
+            <Lbl c="Regional"/>
+            <Sel value={rf} onChange={v=>sRf(String(v))} options={rO} theme={theme} style={{minWidth:112}}/>
+          </>
+        )}
+
         <Sep/>
 
         {/* Unit selector */}
@@ -513,35 +519,21 @@ function DesktopFilterBar({
           position:'sticky', right:0, paddingLeft:8, background:t.filterbg,
           boxShadow: theme==='dark' ? '-14px 0 12px -10px rgba(0,0,0,0.45)' : '-14px 0 12px -10px rgba(0,0,0,0.08)',
         }}>
-          {loading ? (
-            <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
-              <div style={{display:'flex',gap:3,alignItems:'center'}}>
-                {[0,1,2].map(i=>(
-                  <div key={i} style={{width:4,height:4,borderRadius:'50%',background:'#4ade80',
-                    transition:'opacity 0.2s',opacity:i===dotStep?1:0.25}}/>
-                ))}
-              </div>
-              <div style={{fontSize:9,fontFamily:'monospace',color:'#4ade80',letterSpacing:'0.06em',
-                background:'rgba(74,222,128,0.1)',border:'1px solid rgba(74,222,128,0.3)',
-                borderRadius:3,padding:'0 6px',height:16,display:'flex',alignItems:'center'}}>
-                mengambil data
-              </div>
-            </div>
-          ) : unapplied ? (
+          {unapplied && !loading && (
             <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0,
               background:t.warnBg,border:`1px solid ${t.warnBorder}`,
               borderRadius:3,padding:'0 7px',height:18}}>
               <span style={{width:5,height:5,borderRadius:'50%',background:t.warnText,animation:'fbPulseDot 1.3s ease-in-out infinite'}}/>
               <span style={{fontSize:9,fontFamily:'monospace',color:t.warnText,fontWeight:700,letterSpacing:'0.02em'}}>Belum diterapkan</span>
             </div>
-          ) : null}
+          )}
 
           {dirty&&<button onClick={onReset} style={{height:22,padding:'0 7px',borderRadius:4,fontSize:10,fontFamily:'monospace',background:'transparent',border:`1px solid ${t.borderInput}`,color:t.textMuted,cursor:'pointer'}}>Reset</button>}
 
           <div style={{position:'relative'}}>
             <button onClick={onApply} disabled={loading}
               style={{height:22,padding:'0 11px',borderRadius:4,fontSize:10,fontWeight:700,fontFamily:'IBM Plex Mono,monospace',background:'#1c9706',border:'none',color:'#fff',cursor:loading?'not-allowed':'pointer',opacity:loading?0.5:1,flexShrink:0,boxShadow:'0 1px 4px rgba(28,151,6,0.3)'}}>
-              Terapkan
+              {loading ? 'Memuat…' : 'Terapkan'}
             </button>
             {unapplied && !loading && (
               <span style={{position:'absolute',top:-3,right:-3,width:7,height:7,borderRadius:'50%',background:t.warnText,border:`1.5px solid ${t.filterbg}`}}/>
@@ -555,22 +547,14 @@ function DesktopFilterBar({
 
 // ─── MobileFilterBar ─────────────────────────────────────────────────────────
 function MobileFilterBar({
-  applied, unapplied, areas, onOpen, loading, theme,
+  applied, unapplied, areas, regions, onOpen, loading, theme,
 }:{
-  applied: { y1:number; wStart1:number; w1:number; y2:number; wStart2:number; w2:number; af:string; unit:string };
+  applied: { y1:number; wStart1:number; w1:number; y2:number; wStart2:number; w2:number; af:string; regional:string; unit:string };
   unapplied: boolean;
-  areas:AreaConfig[];
+  areas:AreaConfig[]; regions:RegionConfig[];
   onOpen:()=>void; loading:boolean; theme:Theme;
 }) {
   const t=tk[theme];
-  const [dotStep, setDotStep] = useState(0);
-
-  useEffect(() => {
-    if (loading) {
-      const id = setInterval(() => setDotStep(s => (s + 1) % 3), 400);
-      return () => clearInterval(id);
-    }
-  }, [loading]);
 
   type CV='blue'|'green'|'orange';
   const Chip=({v,ch}:{v:string;ch:CV})=>{
@@ -589,6 +573,7 @@ function MobileFilterBar({
     end > 0 ? `W${start > 0 ? start : 1}–W${end}` : 'Semua';
 
   const aName=areas.find(a=>a.id===applied.af)?.name;
+  const rName=regions.find(r=>r.id===applied.regional)?.name;
 
   return (
     <div style={{
@@ -626,31 +611,11 @@ function MobileFilterBar({
         <span style={{fontSize:8,color:t.textFaint,fontFamily:'monospace',flexShrink:0}}>vs</span>
         <Chip v={`${applied.y2} ${rangeLabel(applied.wStart2,applied.w2)}`} ch="green"/>
         {aName&&<Chip v={aName} ch="orange"/>}
+        {rName&&<Chip v={rName} ch="orange"/>}
         {applied.unit!=='units_dos'&&(
           <Chip v={UNIT_OPTIONS.find(o=>o.value===applied.unit)?.label??applied.unit} ch="orange"/>
         )}
       </div>
-
-      {loading && (
-        <>
-          <div style={{display:'flex',gap:3,alignItems:'center',flexShrink:0}}>
-            {[0,1,2].map(i=>(
-              <div key={i} style={{
-                width:4,height:4,borderRadius:'50%',background:'#4ade80',
-                transition:'opacity 0.2s',opacity:i===dotStep?1:0.25,
-              }}/>
-            ))}
-          </div>
-          <div style={{
-            fontSize:9,fontFamily:'monospace',color:'#4ade80',letterSpacing:'0.06em',
-            background:'rgba(74,222,128,0.1)',border:'1px solid rgba(74,222,128,0.3)',
-            borderRadius:3,padding:'0 6px',height:16,display:'flex',alignItems:'center',
-            flexShrink:0,
-          }}>
-            mengambil data
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -660,7 +625,9 @@ function MobileFilterSheet({
   open,onClose,
   y1,sY1,wStart1,sWStart1,w1,sW1,
   y2,sY2,wStart2,sWStart2,w2,sW2,
-  af,sAf,areas,onApply,onReset,loading,theme,
+  af,sAf,areas,
+  rf,sRf,regions,canRegional,
+  onApply,onReset,loading,theme,
   sSelectedUnit,
   selectedUnit,
   unapplied,
@@ -673,6 +640,7 @@ function MobileFilterSheet({
   wStart2:number; sWStart2:(v:number)=>void;
   w2:number; sW2:(v:number)=>void;
   af:string; sAf:(v:string)=>void; areas:AreaConfig[];
+  rf:string; sRf:(v:string)=>void; regions:RegionConfig[]; canRegional:boolean;
   selectedUnit:string; sSelectedUnit:(v:string)=>void;
   unapplied:boolean;
   onApply:()=>void; onReset:()=>void; loading:boolean; theme:Theme;
@@ -680,9 +648,10 @@ function MobileFilterSheet({
 
   const t=tk[theme];
   // "dirty" = beda dari DEFAULT (untuk tombol Reset) — beda konsep dengan "unapplied"
-  const dirty = wStart1!==0 || w1!==0 || wStart2!==0 || w2!==0 || !!af || selectedUnit!=='units_dos';
+  const dirty = wStart1!==0 || w1!==0 || wStart2!==0 || w2!==0 || !!af || !!rf || selectedUnit!=='units_dos';
   const yO=YEARS.map(y=>({value:y,label:String(y)}));
   const aO=[{value:'',label:'Semua Area'},...areas.map(a=>({value:a.id,label:a.name}))];
+  const rO=[{value:'',label:'Semua Regional'},...regions.map(r=>({value:r.id,label:r.name}))];
 
   const Row=({l,children}:{l:string;children:React.ReactNode})=>(
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',minHeight:38,borderBottom:`1px solid ${t.border}`}}>
@@ -760,6 +729,15 @@ function MobileFilterSheet({
             <Sel value={af} onChange={(v:any)=>sAf(String(v))} options={aO} theme={theme} style={{minWidth:130}}/>
           </Row>
 
+          {canRegional && (
+            <>
+              <div style={{paddingTop:10,fontSize:8,fontWeight:800,color:t.textMuted,fontFamily:'monospace',textTransform:'uppercase',letterSpacing:'0.12em'}}>Regional</div>
+              <Row l="Filter Regional">
+                <Sel value={rf} onChange={(v:any)=>sRf(String(v))} options={rO} theme={theme} style={{minWidth:130}}/>
+              </Row>
+            </>
+          )}
+
           <div style={{paddingTop:10,fontSize:8,fontWeight:800,color:t.textMuted,fontFamily:'monospace',textTransform:'uppercase',letterSpacing:'0.12em'}}>Unit</div>
           <div style={{display:'flex',flexWrap:'wrap',gap:5,padding:'10px 0'}}>
             {UNIT_OPTIONS.map(opt=>{
@@ -811,6 +789,100 @@ function MobileFilterSheet({
         </div>
       </div>
     </>
+  );
+}
+
+// ─── LoadingOverlay ──────────────────────────────────────────────────────────
+function LoadingOverlay({ theme, targetRef }: { theme: Theme; targetRef: React.RefObject<HTMLDivElement | null> }) {
+  const t = tk[theme];
+  const [dots, setDots] = useState(0);
+  const [rect, setRect] = useState<{top:number; left:number; width:number; height:number} | null>(null);
+
+  useEffect(() => {
+    const iv = setInterval(() => setDots(d => (d + 1) % 4), 400);
+    return () => clearInterval(iv);
+  }, []);
+
+  useEffect(() => {
+    const update = () => {
+      if (!targetRef.current) return;
+      const r = targetRef.current.getBoundingClientRect();
+      setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    const ro = new ResizeObserver(update);
+    if (targetRef.current) ro.observe(targetRef.current);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+      ro.disconnect();
+    };
+  }, [targetRef]);
+
+  if (!rect || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div style={{
+      position: 'fixed',
+      top: rect.top, left: rect.left, width: rect.width, height: rect.height,
+      zIndex: 9998,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: theme === 'dark' ? 'rgba(7,9,14,0.62)' : 'rgba(238,241,247,0.68)',
+      backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+      pointerEvents: 'auto',
+    }}>
+      <style>{`
+        @keyframes lcPulse { 0%,100%{ opacity:0.7; transform:scale(1) } 50%{ opacity:1; transform:scale(1.06) } }
+        @keyframes lcRing  { to { transform: rotate(360deg) } }
+        @keyframes lcPop   { from{ opacity:0; transform:translateY(10px) scale(0.95) } to{ opacity:1; transform:translateY(0) scale(1) } }
+        @keyframes lcBar   { 0%{ width:0% } 40%{ width:60% } 70%{ width:82% } 100%{ width:96% } }
+      `}</style>
+      <div style={{
+        background: t.cardbg, border: `1px solid ${t.borderCard}`, borderRadius: 16,
+        padding: '26px 34px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+        boxShadow: theme === 'dark' ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(15,23,42,0.16)',
+        animation: 'lcPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both',
+        minWidth: 210,
+      }}>
+        <div style={{ position:'relative', width:56, height:56 }}>
+          <svg style={{ position:'absolute', inset:0, animation:'lcRing 1.4s linear infinite' }}
+            width="56" height="56" viewBox="0 0 64 64" fill="none">
+            <circle cx="32" cy="32" r="28" stroke="rgba(28,151,6,0.15)" strokeWidth="2.5"/>
+            <path d="M32 4 a28 28 0 0 1 24.2 14" stroke="#1c9706" strokeWidth="2.5" strokeLinecap="round"/>
+          </svg>
+          <div style={{
+            position:'absolute', inset:9, borderRadius:11,
+            // background:'rgba(28,151,6,0.12)', border:'1px solid rgba(28,151,6,0.25)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            animation:' infinite',
+          }}>
+            <img src="/logo-cgkn.png" alt="CGKN" style={{ width:24, height:24, objectFit:'contain' }}/>
+          </div>
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:t.text, fontFamily:'IBM Plex Mono,monospace', letterSpacing:'-0.01em' }}>
+            Mengambil Data
+          </div>
+          <div style={{ fontSize:9.5, color:t.textMuted, fontFamily:'IBM Plex Mono,monospace' }}>
+            Menyesuaikan tampilan dashboard
+          </div>
+        </div>
+
+        <div style={{ width:150 }}>
+          <div style={{ height:2, borderRadius:2, background:t.borderCard, overflow:'hidden' }}>
+            <div style={{ height:'100%', background:'linear-gradient(90deg, #1c9706, #4ade80)', borderRadius:2, animation:'lcBar 2.2s cubic-bezier(0.4,0,0.2,1) forwards' }}/>
+          </div>
+        </div>
+
+        <div style={{ fontSize:9.5, color:t.textMuted, fontFamily:'IBM Plex Mono,monospace', letterSpacing:'0.04em' }}>
+          Mengambil data{'.'.repeat(dots)}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -993,11 +1065,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
   const l4wAvg=l4w.l4wAverage; const c1w=l4w.c1wValue; const lPos=c1w>=l4wAvg; const lc=lPos?'#10b981':'#ef4444';
   const lData=l4w.weeklyTrendData?.map((item:any)=>({w:item.week,v:item.value,avg:l4wAvg}))||[];
 
-  // ── Unit-aware outlet/product values ──────────────────────────────────────
-  // Sebelumnya bagian "Outlet Kontribusi" & "Top Produk" selalu pakai r.dozNet
-  // (= units_dos) apa pun unit yang dipilih, karena backend cuma kirim dozNet.
-  // Setelah backend mengirim unitsBks/unitsSlop/unitsBal/omzet juga di outletData,
-  // baca lewat helper ini supaya ikut berubah saat unit diganti.
   const getOutletUnitValue = (r:any): number => {
     if (selectedUnit === 'omzet')      return r.omzet      ?? 0;
     if (selectedUnit === 'units_bks')  return r.unitsBks   ?? 0;
@@ -1188,7 +1255,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
     );
   }
 
-  // ── Desktop layout ──────────────────────────────────────────────────────────
   return (
     <div style={{height:availH,display:'flex',flexDirection:'column',gap:GAP,overflow:'hidden'}}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1.8fr',gap:GAP,height:KPI_H,flexShrink:0}}>
@@ -1263,7 +1329,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
       </div>
 
       <div style={{flex:1,minHeight:0,display:'grid',gridTemplateColumns:bodyGrid,gap:GAP}}>
-        {/* Kolom kiri */}
         <div style={{display:'flex',flexDirection:'column',gap:GAP,minHeight:0,overflow:'hidden'}}>
           <Card theme={theme} accent="#3b82f6" title={`Mingguan — ${pL} vs ${cL}`} icon={<Calendar size={10} color="#3b82f6"/>} color="#3b82f6" sub={`${posW}/${wc.length} minggu positif`} style={{flex:'1 1 0'}}>
             <ResponsiveContainer width="100%" height={cH}>
@@ -1330,7 +1395,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
           </div>
         </div>
 
-        {/* Kolom tengah */}
         <div style={{display:'flex',flexDirection:'column',gap:GAP,minHeight:0,overflow:'hidden'}}>
           <Card theme={theme} accent={isPos?'#10b981':'#ef4444'} title={`YoY — ${pL} vs ${cL}`} icon={<TrendingUp size={10} color={isPos?'#10b981':'#ef4444'}/>} color={isPos?'#10b981':'#ef4444'} sub={`${isPos?'+':''}${gPct.toFixed(1)}% pertumbuhan tahunan`} style={{flex:'1 1 0'}}>
             <ResponsiveContainer width="100%" height={cH}>
@@ -1396,7 +1460,6 @@ function OverviewTab({ data, theme, y1, y2, availH, selectedUnit = 'units_dos' }
           </Card>
         </div>
 
-        {/* Kolom kanan */}
         {!isMobile&&(
           <div style={{display:'flex',flexDirection:'column',gap:GAP,minHeight:0,overflow:'hidden'}}>
             <Card theme={theme} accent="#10b981" title={`Kuartal ${cL} · ${unitLabel}`} icon={<BarChart3 size={10} color="#10b981"/>} color="#10b981" sub={`${hitQ}/${qd.length} hit target`} style={{flex:'1 1 0'}}>
@@ -1454,7 +1517,7 @@ function ContentWrapper({ children, theme }:{ children:React.ReactNode; theme:Th
 }
 
 const EMPTY_DATA: SalesData = {
-  weeklyData:[],quarterlyData:[],weekComparisons:[],
+  weeklyData:[],quarterlyData:[], QuarterlyYoYData: [], weekComparisons:[],
   l4wc4wData:{l4wAverage:0,c4wAverage:0,c1wValue:0,variance:0,variancePercentage:0},
   yearOnYearGrowth:{previousYearTotal:0,currentYearTotal:0,variance:0,variancePercentage:0},
   comparisonYears:{previousYear:null,currentYear:null},
@@ -1467,7 +1530,8 @@ function DashboardInner() {
   const [collapsed,setCol] = useState(false);
   const [sheetOpen,setSheet] = useState(false);
   const {isMobile,isTablet} = useBreakpoint();
-  const {user} = useAuth();
+  const {user, canUseRegionalFilter} = useAuth();
+  const canRegional = canUseRegionalFilter();
 
   const [y1,    sY1]    = useState(2025);
   const [wStart1, sWStart1] = useState(0);
@@ -1476,22 +1540,29 @@ function DashboardInner() {
   const [wStart2, sWStart2] = useState(0);
   const [w2,    sW2]    = useState(0);
   const [af,    sAf]    = useState('');
+  const [rf,    sRf]    = useState(''); // filter regional, mutually exclusive dengan `af`
   const [selectedUnit, setSelectedUnit] = useState('units_dos'); // draft, dikontrol tombol unit
 
-  // ── Snapshot filter yang TERAKHIR SUKSES di-fetch. Dipakai untuk render & untuk
-  //    menghitung "unapplied" (filter sudah diubah tapi belum diterapkan).
+  // Area & regional mutually exclusive: pilih salah satu akan mengosongkan yang lain,
+  // biar backend gak bingung mesti filter berdasarkan mana.
+  const handleAfChange = (v: string) => { sAf(v); if (v) sRf(''); };
+  const handleRfChange = (v: string) => { sRf(v); if (v) sAf(''); };
+
+  // Snapshot filter yang TERAKHIR SUKSES di-fetch. Dipakai untuk render & untuk
+  // menghitung "unapplied" (filter sudah diubah tapi belum diterapkan).
   const [applied, setApplied] = useState({
     y1: 2025, wStart1: 0, w1: 0,
     y2: 2026, wStart2: 0, w2: 0,
-    af: '', unit: 'units_dos',
+    af: '', regional: '', unit: 'units_dos',
   });
 
   const unapplied =
     y1 !== applied.y1 || wStart1 !== applied.wStart1 || w1 !== applied.w1 ||
     y2 !== applied.y2 || wStart2 !== applied.wStart2 || w2 !== applied.w2 ||
-    af !== applied.af || selectedUnit !== applied.unit;
+    af !== applied.af || rf !== applied.regional || selectedUnit !== applied.unit;
 
   const [areas,setAreas]=useState<AreaConfig[]>([]);
+  const [regions,setRegions]=useState<RegionConfig[]>([]);
   const [loading,setLoading]=useState(false);
   const [availH,setAvailH]=useState(600);
   const mainRef=useRef<HTMLDivElement>(null);
@@ -1504,6 +1575,11 @@ function DashboardInner() {
 
   const [data,setData]=useState<SalesData>(EMPTY_DATA);
   const t=tk[theme];
+
+  // Regional yang boleh dilihat user ini (root lihat semua)
+  const accessibleRegions = user
+    ? getAccessibleRegions(regions, user.allowed_areas ?? [], user.role === 'root')
+    : [];
 
   useEffect(()=>{
     try {
@@ -1540,6 +1616,18 @@ function DashboardInner() {
     })();
   },[]);
 
+  useEffect(()=>{
+    if (!canRegional) return; // jangan fetch kalau user gak punya izin, hemat request
+    (async()=>{
+      try {
+        const r=await fetch('/api/regions');
+        if(!r.ok) throw new Error();
+        const j=await r.json();
+        setRegions(j.data?.regions??[]);
+      } catch { setRegions([]); }
+    })();
+  },[canRegional]);
+
   const doApply = async () => {
   setLoading(true);
   try {
@@ -1555,7 +1643,10 @@ function DashboardInner() {
     if (wStart2 > 0) p.append('weekStart2', String(wStart2));
     if (w2 > 0)      p.append('weekEnd2',   String(w2));
 
-    if (af.trim()) p.append('area', af.trim());
+    // Area & regional mutually exclusive — regional diprioritaskan kalau somehow keduanya terisi
+    if (rf.trim())       p.append('regional', rf.trim());
+    else if (af.trim())  p.append('area', af.trim());
+
     if (selectedUnit) p.append('selectedUnit', selectedUnit);
 
     const r = await fetch(`/api/sales-analysis?${p}`);
@@ -1565,7 +1656,7 @@ function DashboardInner() {
       setData(j.data);
       // Snapshot disimpan HANYA setelah fetch sukses → ini sumber kebenaran
       // untuk chip mobile, KPI/chart (selectedUnit di OverviewTab), dan "unapplied".
-      setApplied({ y1, wStart1, w1, y2, wStart2, w2, af, unit: selectedUnit });
+      setApplied({ y1, wStart1, w1, y2, wStart2, w2, af, regional: rf, unit: selectedUnit });
     }
     else console.error('API error:', j.error);
   } catch (e) {
@@ -1578,9 +1669,9 @@ function DashboardInner() {
   const doReset = () => {
     sWStart1(0); sW1(0);
     sWStart2(0); sW2(0);
-    sAf('');
+    sAf(''); sRf('');
     setSelectedUnit('units_dos');
-    setApplied({ y1, wStart1:0, w1:0, y2, wStart2:0, w2:0, af:'', unit:'units_dos' });
+    setApplied({ y1, wStart1:0, w1:0, y2, wStart2:0, w2:0, af:'', regional:'', unit:'units_dos' });
     setData(EMPTY_DATA);
   };
 
@@ -1592,6 +1683,7 @@ function DashboardInner() {
     switch(tab){
       case 'weekly':    return <WeekComparison data={data.weekComparisons} comparisonYears={data.comparisonYears} comparisonWeeks={data.comparisonWeeks} theme={theme}/>;
       case 'quarterly': return <QuarterlyAnalysis data={data.quarterlyData} theme={theme} selectedUnit={selectedUnit} onUnitChange={setSelectedUnit}/>;
+      case 'quarterly2': return <QuarterlyAnalysisYearly data={data.QuarterlyYoYData ?? []} theme={theme} selectedUnit={selectedUnit} onUnitChange={setSelectedUnit} previousYearLabel={applied.y1} currentYearLabel={applied.y2}/>;
       case 'l4wc4w':   return <L4WC4WAnalysis data={data.l4wc4wData} theme={theme}/>;
       case 'yoy':       return <YearOnYearGrowth data={data.yearOnYearGrowth} comparisonYears={data.comparisonYears} theme={theme}/>;
       case 'outlet':    return <OutletContributionSection data={data} theme={theme}/>;
@@ -1605,7 +1697,7 @@ function DashboardInner() {
 
   return (
     <ThemeCtx.Provider value={theme}>
-      <div style={{width:'100%',background:t.pagebg,fontFamily:'IBM Plex Sans,sans-serif',height:'100vh',display:'flex',position:'relative',overflow:'hidden'}}>
+      <div style={{width:'100%',background:t.pagebg,fontFamily:'IBM Plex Sans,sans-serif',height:'100dvh',display:'flex',position:'relative',overflow:'hidden'}}>
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap');
           html,body{margin:0;padding:0;height:100%}
@@ -1622,29 +1714,24 @@ function DashboardInner() {
         {!isMobile&&<Sidebar activeTab={tab} setActiveTab={setTab} collapsed={collapsed} setCollapsed={setCol} theme={theme} setTheme={applyTheme}/>}
 
         <div style={{
-          marginLeft:sideW, display:'flex', flexDirection:'column', height:'100vh', flex:1,
+          marginLeft:sideW, display:'flex', flexDirection:'column', height:'100dvh', flex:1,
           transition:isMobile?'none':'margin-left 0.2s cubic-bezier(.4,0,.2,1)',
           overflow:'hidden', minWidth:0,
         }}>
           {isMobile&&<MobileHeader theme={theme} setTheme={applyTheme}/>}
 
-          {isRO&&(
-            <div style={{padding:'3px 12px',background:t.warnBg,borderBottom:`1px solid ${t.warnBorder}`,display:'flex',alignItems:'center',gap:5,fontSize:10,color:t.warnText,flexShrink:0}}>
-              <Shield size={10}/> Login sebagai <strong>User</strong> — hanya bisa melihat.
-            </div>
-          )}
-
           {isMobile?(
             <>
               <MobileFilterBar
-                applied={applied} unapplied={unapplied} areas={areas}
+                applied={applied} unapplied={unapplied} areas={areas} regions={accessibleRegions}
                 onOpen={()=>setSheet(true)} loading={loading} theme={theme}
               />
                <MobileFilterSheet
                 open={sheetOpen} onClose={()=>setSheet(false)}
                 y1={y1} sY1={sY1} wStart1={wStart1} sWStart1={sWStart1} w1={w1} sW1={sW1}
                 y2={y2} sY2={sY2} wStart2={wStart2} sWStart2={sWStart2} w2={w2} sW2={sW2}
-                af={af} sAf={sAf} areas={areas}
+                af={af} sAf={handleAfChange} areas={areas}
+                rf={rf} sRf={handleRfChange} regions={accessibleRegions} canRegional={canRegional}
                 selectedUnit={selectedUnit} sSelectedUnit={setSelectedUnit}
                 unapplied={unapplied}
                 onApply={doApply} onReset={doReset} loading={loading} theme={theme}
@@ -1655,7 +1742,8 @@ function DashboardInner() {
             <DesktopFilterBar
               y1={y1} sY1={sY1} wStart1={wStart1} sWStart1={sWStart1} w1={w1} sW1={sW1}
               y2={y2} sY2={sY2} wStart2={wStart2} sWStart2={sWStart2} w2={w2} sW2={sW2}
-              af={af} sAf={sAf} areas={areas}
+              af={af} sAf={handleAfChange} areas={areas}
+              rf={rf} sRf={handleRfChange} regions={accessibleRegions} canRegional={canRegional}
               selectedUnit={selectedUnit} sSelectedUnit={setSelectedUnit}
               unapplied={unapplied}
               onApply={doApply} onReset={doReset} loading={loading} theme={theme}
@@ -1671,8 +1759,10 @@ function DashboardInner() {
                 : `${pad}px`,
               background:t.contentBg,
               overflow:(tab==='overview'&&!isMobile)?'hidden':'auto',
+              position:'relative',
             }}
           >
+            {loading && <LoadingOverlay theme={theme} targetRef={mainRef}/>}
             {tab==='overview'
               ? renderContent()
               : <ContentWrapper theme={theme}>{renderContent()}</ContentWrapper>

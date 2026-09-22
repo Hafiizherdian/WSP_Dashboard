@@ -3,9 +3,9 @@
 // app/login/page.tsx
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Eye, EyeOff, AlertCircle, LogIn, User, BarChart2 } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, LogIn, User } from 'lucide-react';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// Constants
 
 const FONT_SANS = 'IBM Plex Sans, sans-serif';
 const FONT_MONO = 'IBM Plex Mono, monospace';
@@ -14,17 +14,48 @@ const ERROR_MESSAGES: Record<string, string> = {
   forbidden: 'Akses ditolak untuk halaman tersebut.',
 };
 
-// ─── Style Builders ───────────────────────────────────────────────────────────
+// Style Builders
 
 const styles = {
   page: {
     minHeight: '100vh',
-    background: '#f0f2f5',
+    background: '#ffffff',
+    display: 'flex',
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    fontFamily: FONT_SANS,
+  } as React.CSSProperties,
+
+  shell: {
+    width: '100%',
+    maxWidth: 1440,
+    minHeight: '100vh',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    fontFamily: FONT_SANS,
+    gap: 0,
+    padding: '24px',
+  } as React.CSSProperties,
+
+  formCol: {
+    flex: '0 0 420px',
+    display: 'flex',
+    justifyContent: 'center',
+  } as React.CSSProperties,
+
+  illustrationCol: {
+    flex: '1 1 720px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 24px',
+  } as React.CSSProperties,
+
+  illustrationImg: {
+    width: '100%',
+    maxWidth: 880,
+    height: 'auto',
+    objectFit: 'contain',
   } as React.CSSProperties,
 
   card: (mounted: boolean): React.CSSProperties => ({
@@ -97,7 +128,7 @@ const styles = {
   }),
 };
 
-// ─── Input focus/blur handlers ────────────────────────────────────────────────
+// Input focus/blur handlers
 
 const inputFocusHandlers = {
   onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
@@ -110,7 +141,7 @@ const inputFocusHandlers = {
   },
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// Sub-components
 
 function LoadingSpinner() {
   return (
@@ -136,34 +167,6 @@ function ErrorBanner({ message }: { message: string }) {
     }}>
       <AlertCircle size={14} style={{ flexShrink: 0 }} />
       {message}
-    </div>
-  );
-}
-
-function LiveBadge() {
-  return (
-    <div style={{
-      position: 'absolute',
-      top: 18, right: 18,
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 5,
-      background: '#edf8ea',
-      color: '#1c9706',
-      fontSize: 10,
-      fontFamily: FONT_MONO,
-      fontWeight: 700,
-      padding: '3px 8px',
-      borderRadius: 6,
-      letterSpacing: '0.07em',
-    }}>
-      <span style={{
-        width: 6, height: 6,
-        borderRadius: '50%',
-        background: '#1c9706',
-        display: 'inline-block',
-      }} />
-      LIVE
     </div>
   );
 }
@@ -212,7 +215,19 @@ function CardLogo() {
   );
 }
 
-// ─── Login Form ───────────────────────────────────────────────────────────────
+// Illustration Panel
+
+function IllustrationPanel() {
+  return (
+    <img
+      src="/loginaset2.jpg"
+      alt="CGKN Dashboard Illustration"
+      style={styles.illustrationImg}
+    />
+  );
+}
+
+// Login Form
 
 function LoginForm() {
   const router   = useRouter();
@@ -268,9 +283,6 @@ function LoginForm() {
 
       {/* Green accent top line */}
       <div style={styles.accentLine} />
-
-      {/* Live badge */}
-      {/* <LiveBadge /> */}
 
       {/* Logo + title */}
       <CardLogo />
@@ -369,7 +381,7 @@ function LoginForm() {
   );
 }
 
-// ─── Login Page ───────────────────────────────────────────────────────────────
+// Login Page
 
 export default function LoginPage() {
   return (
@@ -382,12 +394,22 @@ export default function LoginPage() {
           -webkit-box-shadow: 0 0 0 100px #f7f8fa inset !important;
           -webkit-text-fill-color: #111827 !important;
         }
+        @media (max-width: 860px) {
+          .login-illustration-col { display: none !important; }
+        }
       `}</style>
 
       <div style={styles.page}>
-        <Suspense fallback={<div style={styles.card(true)} />}>
-          <LoginForm />
-        </Suspense>
+        <div style={styles.shell}>
+          <div className="login-illustration-col" style={{ ...styles.illustrationCol, order: 0 }}>
+            <IllustrationPanel />
+          </div>
+          <div style={{ ...styles.formCol, order: 1 }}>
+            <Suspense fallback={<div style={styles.card(true)} />}>
+              <LoginForm />
+            </Suspense>
+          </div>
+        </div>
       </div>
     </>
   );

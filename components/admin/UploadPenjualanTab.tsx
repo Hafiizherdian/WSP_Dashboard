@@ -221,7 +221,7 @@ function PreviewModal({ file, onClose, theme }: { file: UploadedFile; onClose: (
     <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 1100, background: t.modalOverlay, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? 10 : 24, backdropFilter: 'blur(4px)', animation: 'fadeIn 0.15s ease' }}>
       <div style={{ background: t.cardbg, border: `1px solid ${t.borderCard}`, borderRadius: 16, width: '100%', maxWidth: 1000, maxHeight: isMobile ? '92vh' : '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: t.shadowElevated, animation: 'slideUp 0.2s ease' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${t.border}`, background: t.tableHead, flexShrink: 0, gap: 12 }}>
+        {/* <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${t.border}`, background: t.tableHead, flexShrink: 0, gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
             <div style={{ width: 34, height: 34, borderRadius: 9, background: t.blue.bg, border: `1px solid ${t.blue.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Eye size={15} color={t.blue.text} />
@@ -234,7 +234,7 @@ function PreviewModal({ file, onClose, theme }: { file: UploadedFile; onClose: (
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, background: t.red.bg, border: `1px solid ${t.red.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <X size={14} color={t.red.text} />
           </button>
-        </div>
+        </div> */}
         <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '12px' : '16px 20px' }}>
           <PreviewPanel fileId={file.id} fileName={file.original_name} fileStatus={file.status} theme={theme} />
         </div>

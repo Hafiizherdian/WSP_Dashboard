@@ -25,15 +25,6 @@
  * PERUBAHAN v6 (fix doz tidak terhitung untuk Des 29-31):
  *   - Tambah debug log untuk trace record boundary Des/Jan
  *   - Pastikan weekProductMap key menggunakan isoYear bukan rawYear
- *
- * PERUBAHAN v7 (optimasi performa — output identik):
- *   - reconstructVirtualRecords dihapus total; weekProductMap + omzetByProductWeek
- *     dipass langsung ke generateQuarterlyData dan generateL4WC4WData
- *   - generateQuarterlyData: satu pass pre-group byWeek (O(N)) menggantikan
- *     O(N×52) filter berulang per kuartal dan per minggu
- *   - generateL4WC4WData: iterasi langsung weekProductMap, tidak pakai array virtual
- *   - generateProductL4WC1WData: terima Map<string,UnitAgg> langsung (no re-iterate)
- *   - Semua reduce 4× per unit type diganti lookup O(1) dari pre-grouped Map
  */
 
 import Cursor from 'pg-cursor';
@@ -132,14 +123,21 @@ function calcISOWeekYear(year: number, month: number, day: number): { week: numb
   return { week, isoYear };
 }
 
+/**
+ * Resolve ISO week dan tahun dari record DB.
+ * Menggunakan calcISOWeekYear untuk validasi aktual di boundary Des/Jan
+ * sehingga tidak perlu hardcode tanggal (Des 28 bisa W1 di tahun tertentu).
+ */
 function resolveWeekYear(record: any): { week: number; year: number } {
   const { year: rawYear, month, day } = parseDateLocal(record.date);
   const dbWeek = Number(record.week);
 
+  // Des + W1 → selalu masuk W1 tahun berikutnya
   if (month === 11 && dbWeek === 1) {
     return { week: 1, year: rawYear + 1 };
   }
 
+  // Jan + W52/53 → selalu masuk W52/53 tahun sebelumnya
   if (month === 0 && (dbWeek === 52 || dbWeek === 53)) {
     return { week: dbWeek, year: rawYear - 1 };
   }
@@ -157,14 +155,27 @@ function getCalendarYearsToFetch(isoYears: number[]): number[] {
   return Array.from(calYears).sort((a, b) => a - b);
 }
 
-// ─── ISO week → date range ────────────────────────────────────────────────────
+// ─── Streaming query dengan pg-cursor ────────────────────────────────────────
+// ─── ISO week → date range (untuk SQL WHERE) ──────────────────────────────────
+/**
+ * Konversi ISO week ke date range (Senin–Minggu).
+ * Hasilnya dipakai untuk WHERE date BETWEEN di SQL supaya filter
+ * dilakukan di DB, bukan di aplikasi.
+ *
+ * Kenapa perlu buffer +/- 3 hari?
+ * ISO week bisa overlap dengan tahun kalender sebelumnya/sesudahnya
+ * (misal: W1 2025 dimulai 30 Des 2024). Buffer memastikan record
+ * boundary Des/Jan tetap ter-fetch, lalu resolveWeekYear() di app
+ * yang melakukan penilaian presisi.
+ */
 function isoWeekToDateRange(
   isoYear:   number,
   weekStart: number,
   weekEnd:   number,
 ): { startDate: Date; endDate: Date } {
+  // Senin pertama ISO W1: cari hari Senin yang mengandung 4 Jan
   const jan4    = new Date(Date.UTC(isoYear, 0, 4));
-  const jan4Day = jan4.getUTCDay() || 7;
+  const jan4Day = jan4.getUTCDay() || 7; // 1=Sen ... 7=Min
   const mondayW1 = new Date(jan4);
   mondayW1.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
 
@@ -172,8 +183,10 @@ function isoWeekToDateRange(
   startDate.setUTCDate(mondayW1.getUTCDate() + (weekStart - 1) * 7);
 
   const endDate = new Date(mondayW1);
+  // +6 → Minggu terakhir minggu weekEnd, +3 buffer boundary
   endDate.setUTCDate(mondayW1.getUTCDate() + (weekEnd - 1) * 7 + 6 + 3);
 
+  // Buffer mundur 3 hari di awal (mis. W1 bisa mulai 29 Des tahun lalu)
   startDate.setUTCDate(startDate.getUTCDate() - 3);
 
   console.log(
@@ -192,6 +205,7 @@ async function streamSalesRecords(
   const conditions: string[] = [];
   const values: any[]        = [];
 
+  // ── 1. Filter AREA (paling selektif → index hit duluan) ──────────────────
   if (filters?.area && filters.area.trim().length > 0) {
     values.push(filters.area.trim());
     conditions.push(`area = $${values.length}`);
@@ -200,11 +214,17 @@ async function streamSalesRecords(
     conditions.push(`area = ANY($${values.length})`);
   }
 
+  // ── 2. Filter TANGGAL via ISO week range (bukan calendar year mentah) ────
+  //
+  // Strategi: konversi setiap ISO year+weekRange ke date range,
+  // gabungkan dengan OR supaya satu query cover year1 dan year2.
+  // resolveWeekYear() di app tetap jalan sebagai second-pass filter
+  // untuk kasus boundary Des/Jan yang presisi.
   const dateConditions: string[] = [];
 
   const addDateRange = (isoYear: number, weekStart: number, weekEnd: number) => {
     const { startDate, endDate } = isoWeekToDateRange(isoYear, weekStart, weekEnd);
-    values.push(startDate.toISOString().slice(0, 10));
+    values.push(startDate.toISOString().slice(0, 10)); // 'YYYY-MM-DD'
     const idxStart = values.length;
     values.push(endDate.toISOString().slice(0, 10));
     const idxEnd = values.length;
@@ -213,7 +233,7 @@ async function streamSalesRecords(
 
   if (filters?.year1 !== undefined) {
     const ws = filters.weekStart1 ?? 1;
-    const we = filters.weekEnd1   ?? 53;
+    const we = filters.weekEnd1   ?? 53; // 53 aman untuk tahun panjang
     addDateRange(filters.year1, ws, we);
     console.log(`📡 year1=${filters.year1} W${ws}-W${we} → date range ditambahkan`);
   }
@@ -225,12 +245,15 @@ async function streamSalesRecords(
     console.log(`📡 year2=${filters.year2} W${ws}-W${we} → date range ditambahkan`);
   }
 
+  // Jika tidak ada year filter sama sekali, fallback ke calendar year lama
+  // (edge case: dipanggil tanpa filter apapun)
   if (dateConditions.length === 0 && filters?.year1 === undefined && filters?.year2 === undefined) {
     console.warn('⚠️  streamSalesRecords dipanggil tanpa year filter — fetch semua tanggal');
   } else if (dateConditions.length > 0) {
     conditions.push(`(${dateConditions.join(' OR ')})`);
   }
 
+  // ── 3. Filter PRODUCT & CITY (opsional, lebih jarang dipakai) ────────────
   if (filters?.product && filters.product.trim().length > 0) {
     values.push(filters.product.trim());
     conditions.push(`product = $${values.length}`);
@@ -439,32 +462,6 @@ interface OutletAgg {
   weekMax:      number;
 }
 
-// ─── OPTIMASI v7: Pre-grouped Map untuk akses O(1) ───────────────────────────
-// Map<year, Map<week, Map<product, UnitAgg>>>
-// Dibentuk satu kali dari weekProductMap, menggantikan semua filter/reduce berulang
-// di generateQuarterlyData dan generateL4WC4WData.
-function buildByWeekMap(
-  weekProductMap: Map<string, UnitAgg>,
-): Map<number, Map<number, Map<string, UnitAgg>>> {
-  // year → week → product → UnitAgg
-  const byYear = new Map<number, Map<number, Map<string, UnitAgg>>>();
-
-  for (const [key, agg] of weekProductMap) {
-    const firstDash  = key.indexOf('-');
-    const secondDash = key.indexOf('-', firstDash + 1);
-    const year       = parseInt(key.slice(0, firstDash));
-    const week       = parseInt(key.slice(firstDash + 1, secondDash));
-    const product    = key.slice(secondDash + 1);
-
-    if (!byYear.has(year)) byYear.set(year, new Map());
-    const byWeek = byYear.get(year)!;
-    if (!byWeek.has(week)) byWeek.set(week, new Map());
-    byWeek.get(week)!.set(product, agg);
-  }
-
-  return byYear;
-}
-
 export async function fetchSalesData(filters?: FetchFilters): Promise<SalesData> {
   try {
     console.log('🔍 fetchSalesData - Filter diterima:', JSON.stringify(filters));
@@ -516,7 +513,7 @@ async function processSalesRecords(filters?: FetchFilters): Promise<SalesData> {
   let crossYearCount    = 0;
   let totalRecordCount  = 0;
   let filteredOutByWeek = 0;
-  let boundaryDosTotal  = 0;
+  let boundaryDosTotal  = 0; // debug: total dos untuk Des 29-31 / Jan 1-3
 
   const requestedISOYears = new Set<number>();
   if (filters?.year1 !== undefined) requestedISOYears.add(filters.year1);
@@ -543,6 +540,7 @@ async function processSalesRecords(filters?: FetchFilters): Promise<SalesData> {
       const isoWeek        = resolved.week;
       const rawDateYear    = parseDateLocal(record.date).year;
 
+      // Debug log untuk boundary Des/Jan
       if ((month === 11 && day >= 28) || (month === 0 && day <= 3)) {
         console.log(`[BOUNDARY] date=${record.date} day=${day} month=${month+1} dbWeek=${rawDbWeek} → isoYear=${isoYear} isoWeek=${isoWeek} dos=${record.units_dos}`);
       }
@@ -847,37 +845,29 @@ async function processSalesRecords(filters?: FetchFilters): Promise<SalesData> {
 
   const toFixed2 = (n: number) => Math.round(n * 100) / 100;
 
-  const yearOnYearGrowth: YearOnYearGrowth = (() => {
-    const prevTotal = yearUnitMap.get(effectivePrevYear) || 0;
-    const currTotal = yearUnitMap.get(effectiveYear)     || 0;
-    const variance  = currTotal - prevTotal;
-    return {
-      previousYearTotal:  toFixed2(prevTotal),
-      currentYearTotal:   toFixed2(currTotal),
-      variance:           toFixed2(variance),
-      variancePercentage: prevTotal > 0 ? Math.round((variance / prevTotal) * 100 * 10) / 10 : 0,
-    };
-  })();
+const yearOnYearGrowth: YearOnYearGrowth = (() => {
+  const prevTotal = yearUnitMap.get(effectivePrevYear) || 0;
+  const currTotal = yearUnitMap.get(effectiveYear)     || 0;
+  const variance  = currTotal - prevTotal;
+  return {
+    previousYearTotal:  toFixed2(prevTotal),
+    currentYearTotal:   toFixed2(currTotal),
+    variance:           toFixed2(variance),
+    variancePercentage: prevTotal > 0 ? Math.round((variance / prevTotal) * 100 * 10) / 10 : 0,
+  };
+})();
 
-  // ── OPTIMASI v7: byWeekMap dibuat satu kali, dipakai oleh quarterly & l4w ──
-  // Menggantikan reconstructVirtualRecords yang mengalokasikan array besar.
-  // byWeekMap: year → week → product → UnitAgg  (akses O(1) di mana-mana)
-  const byWeekMap = buildByWeekMap(weekProductMap);
-
-  const quarterlyData = await generateQuarterlyData(
-    byWeekMap,
-    omzetByProductWeek,
-    effectiveYear,
-    areaId,
-    filters?.selectedUnit,
-  );
-
-  const l4wc4wData = generateL4WC4WData(
-    byWeekMap,
+  const virtualRecords = reconstructVirtualRecords(
+    weekProductMap,
     omzetByProductWeek,
     currentYear,
-    filters,
+    currentYearWeekRange,
   );
+
+  const quarterlyData = await generateQuarterlyData(
+    virtualRecords, effectiveYear, areaId, filters?.selectedUnit,
+  );
+  const l4wc4wData = generateL4WC4WData(virtualRecords, currentYear, filters);
 
   return {
     weeklyData,
@@ -891,35 +881,56 @@ async function processSalesRecords(filters?: FetchFilters): Promise<SalesData> {
   };
 }
 
-// ─── generateQuarterlyData — refactored (v7) ─────────────────────────────────
-// Sebelum: menerima any[], filter O(N×52) berulang per kuartal dan per minggu.
-// Sesudah: menerima Map pre-grouped, semua akses O(1).
-async function generateQuarterlyData(
-  byWeekMap:          Map<number, Map<number, Map<string, UnitAgg>>>,
+function reconstructVirtualRecords(
+  weekProductMap:     Map<string, UnitAgg>,
   omzetByProductWeek: Map<string, number>,
-  year:               number,
-  areaId?:            string,
-  selectedUnit?:      string,
+  currentYear?:       number,
+  currentWeekRange?:  { start: number; end: number } | null,
+): any[] {
+  const virtual: any[] = [];
+
+  for (const [key, agg] of weekProductMap.entries()) {
+    const firstDash  = key.indexOf('-');
+    const secondDash = key.indexOf('-', firstDash + 1);
+    const year       = parseInt(key.slice(0, firstDash));
+    const week       = parseInt(key.slice(firstDash + 1, secondDash));
+    const product    = key.slice(secondDash + 1);
+
+    if (currentYear !== undefined && year !== currentYear) continue;
+
+    const jan4      = new Date(year, 0, 4);
+    const jan4Day   = jan4.getDay() || 7;
+    const startW1   = new Date(jan4);
+    startW1.setDate(jan4.getDate() - (jan4Day - 1));
+    const approxDate = new Date(startW1);
+    approxDate.setDate(startW1.getDate() + (week - 1) * 7);
+
+    virtual.push({
+      year,
+      week,
+      product,
+      date:       approxDate,
+      units_bks:  agg.bks,
+      units_slop: agg.slop,
+      units_bal:  agg.bal,
+      units_dos:  agg.dos,
+      omzet:      omzetByProductWeek.get(key) || 0,
+      omzetValue: omzetByProductWeek.get(key) || 0,
+    });
+  }
+
+  return virtual;
+}
+
+async function generateQuarterlyData(
+  records:       any[],
+  year:          number,
+  areaId?:       string,
+  selectedUnit?: string,
 ): Promise<QuarterlyData[]> {
   const quarters      = ['Q1', 'Q2', 'Q3', 'Q4'] as const;
   const quarterlyData: QuarterlyData[] = [];
-  const unitType      = selectedUnit || 'units_dos';
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  const pickUnit = (agg: UnitAgg): number =>
-    unitType === 'units_bks'  ? agg.bks
-    : unitType === 'units_slop' ? agg.slop
-    : unitType === 'units_bal'  ? agg.bal
-    : agg.dos;
-
-  // Semua minggu yang tersedia untuk tahun ini di byWeekMap
-  const yearWeekMap = byWeekMap.get(year) ?? new Map<number, Map<string, UnitAgg>>();
-
-  // Kumpulkan semua produk yang muncul di tahun ini (untuk referenceRecords fallback)
-  const allProductsThisYear = new Set<string>();
-  yearWeekMap.forEach(prodMap => prodMap.forEach((_, p) => allProductsThisYear.add(p)));
-
-  // ── Target data (sama persis seperti sebelumnya) ──────────────────────────
   interface WeekTargetRow {
     week:       number;
     quarter:    number;
@@ -1043,6 +1054,16 @@ async function generateQuarterlyData(
     }
   });
 
+  const getUnitValueLocal = (record: any, unitType: string): number => {
+    switch (unitType) {
+      case 'units_bks':  return Number(record.units_bks)  || 0;
+      case 'units_slop': return Number(record.units_slop) || 0;
+      case 'units_bal':  return Number(record.units_bal)  || 0;
+      case 'units_dos':
+      default:           return Number(record.units_dos)  || 0;
+    }
+  };
+
   const getMonthFromWeek = (week: number): string => {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const jan4    = new Date(year, 0, 4);
@@ -1054,57 +1075,50 @@ async function generateQuarterlyData(
     return months[targetDate.getMonth()];
   };
 
-  // ── generateQuarterlyProductDetails — refactored ──────────────────────────
-  // Sebelum: iterasi array records dua kali (per kuartal, per minggu).
-  // Sesudah: iterasi weekMap yang sudah di-slice per kuartal (akses O(1)).
   const generateQuarterlyProductDetails = (
-    quarterIndex: number,
-    quarterWeeks: number[], // daftar week yang masuk kuartal ini dan ada di data
+    quarterRecords:   any[],
+    quarterIndex:     number,
+    unitType:         string = 'units_dos',
+    referenceRecords: any[]  = [],
   ): QuarterlyProductDetail[] => {
     const qNum = quarterIndex + 1;
 
-    // product → aggregated actuals untuk kuartal ini
     const productActualMap = new Map<string, {
       units_dos: number; units_bks: number; units_slop: number; units_bal: number;
     }>();
 
-    // product → week → per-week actuals
     const productWeeklyMap = new Map<string, Map<number, {
       units_dos: number; units_bks: number; units_slop: number; units_bal: number;
     }>>();
 
-    for (const week of quarterWeeks) {
-      const prodMap = yearWeekMap.get(week);
-      if (!prodMap) continue;
+    quarterRecords.forEach(record => {
+      const product = record.product || 'Produk tidak diketahui';
+      const week    = Number(record.week);
 
-      prodMap.forEach((agg, product) => {
-        // accumulated per-product
+      if (!productActualMap.has(product)) {
+        productActualMap.set(product, { units_dos:0, units_bks:0, units_slop:0, units_bal:0 });
+      }
+      const d = productActualMap.get(product)!;
+      d.units_dos  += getUnitValueLocal(record, 'units_dos');
+      d.units_bks  += getUnitValueLocal(record, 'units_bks');
+      d.units_slop += getUnitValueLocal(record, 'units_slop');
+      d.units_bal  += getUnitValueLocal(record, 'units_bal');
+
+      if (!productWeeklyMap.has(product)) productWeeklyMap.set(product, new Map());
+      const wm = productWeeklyMap.get(product)!;
+      if (!wm.has(week)) wm.set(week, { units_dos:0, units_bks:0, units_slop:0, units_bal:0 });
+      const wd = wm.get(week)!;
+      wd.units_dos  += getUnitValueLocal(record, 'units_dos');
+      wd.units_bks  += getUnitValueLocal(record, 'units_bks');
+      wd.units_slop += getUnitValueLocal(record, 'units_slop');
+      wd.units_bal  += getUnitValueLocal(record, 'units_bal');
+    });
+
+    if (productActualMap.size === 0 && referenceRecords.length > 0) {
+      referenceRecords.forEach(record => {
+        const product = record.product || 'Produk tidak diketahui';
         if (!productActualMap.has(product)) {
           productActualMap.set(product, { units_dos:0, units_bks:0, units_slop:0, units_bal:0 });
-        }
-        const d = productActualMap.get(product)!;
-        d.units_dos  += agg.dos;
-        d.units_bks  += agg.bks;
-        d.units_slop += agg.slop;
-        d.units_bal  += agg.bal;
-
-        // per-week breakdown
-        if (!productWeeklyMap.has(product)) productWeeklyMap.set(product, new Map());
-        const wm = productWeeklyMap.get(product)!;
-        const wd = wm.get(week) ?? { units_dos:0, units_bks:0, units_slop:0, units_bal:0 };
-        wd.units_dos  += agg.dos;
-        wd.units_bks  += agg.bks;
-        wd.units_slop += agg.slop;
-        wd.units_bal  += agg.bal;
-        wm.set(week, wd);
-      });
-    }
-
-    // Fallback: jika kuartal kosong, isi dengan produk yang ada di tahun ini
-    if (productActualMap.size === 0) {
-      allProductsThisYear.forEach(p => {
-        if (!productActualMap.has(p)) {
-          productActualMap.set(p, { units_dos:0, units_bks:0, units_slop:0, units_bal:0 });
         }
       });
     }
@@ -1159,45 +1173,27 @@ async function generateQuarterlyData(
     return result;
   };
 
-  // ── Debug log (sama seperti versi asli) ───────────────────────────────────
-  console.log(`\n📊 [generateQuarterlyData] year=${year}, total weekMap entries=${yearWeekMap.size}`);
+  const yearRecords = records.filter(r => r.year === year);
+
+  console.log(`\n📊 [generateQuarterlyData] year=${year}, total yearRecords=${yearRecords.length}`);
   [1,2,3,4].forEach(q => {
     const s = (q-1)*13+1, e = Math.min(q*13, 52);
-    let cnt = 0;
-    for (let w = s; w <= e; w++) { if (yearWeekMap.has(w)) cnt++; }
-    console.log(`   Q${q} (W${s}-W${e}): ${cnt} minggu dengan data`);
+    const cnt = yearRecords.filter(r => r.week >= s && r.week <= e).length;
+    console.log(`   Q${q} (W${s}-W${e}): ${cnt} records`);
   });
 
-  // ── Loop per kuartal ──────────────────────────────────────────────────────
   for (let qIndex = 0; qIndex < quarters.length; qIndex++) {
     const quarter   = quarters[qIndex];
     const startWeek = qIndex * 13 + 1;
     const endWeek   = Math.min((qIndex + 1) * 13, 52);
     const qKey      = quarter;
+    const unitType  = selectedUnit || 'units_dos';
 
-    // Daftar minggu yang benar-benar ada di data untuk kuartal ini
-    const quarterWeeks: number[] = [];
-    for (let w = startWeek; w <= endWeek; w++) {
-      if (yearWeekMap.has(w)) quarterWeeks.push(w);
-    }
+    const quarterRecords = records.filter(
+      r => r.year === year && r.week >= startWeek && r.week <= endWeek,
+    );
 
-    // Hitung actual per kuartal: sum dari semua produk di semua minggu kuartal
-    // — O(quarterWeeks × products), bukan O(N × 52)
-    let quarterActual_dos  = 0;
-    let quarterActual_bks  = 0;
-    let quarterActual_slop = 0;
-    let quarterActual_bal  = 0;
-
-    for (const week of quarterWeeks) {
-      const prodMap = yearWeekMap.get(week)!;
-      prodMap.forEach(agg => {
-        quarterActual_dos  += agg.dos;
-        quarterActual_bks  += agg.bks;
-        quarterActual_slop += agg.slop;
-        quarterActual_bal  += agg.bal;
-      });
-    }
-
+    const actual = quarterRecords.reduce((sum, r) => sum + getUnitValueLocal(r, 'units_dos'), 0);
     const qt     = quarterTargetMap[qKey];
     const target = qt && qt.weekCount > 0 ? qt.dos : 0;
 
@@ -1206,32 +1202,18 @@ async function generateQuarterlyData(
                                : unitType === 'units_bal'  ? (qt?.bal  ?? 0)
                                : target;
 
-    const quarterActual = unitType === 'units_bks'  ? quarterActual_bks
-                        : unitType === 'units_slop' ? quarterActual_slop
-                        : unitType === 'units_bal'  ? quarterActual_bal
-                        : quarterActual_dos;
+    const details = generateQuarterlyProductDetails(
+      quarterRecords, qIndex, unitType, yearRecords,
+    );
 
-    const details = generateQuarterlyProductDetails(qIndex, quarterWeeks);
-
-    // ── weeklyBreakdown — akses O(1) dari yearWeekMap ─────────────────────
     const weeklyBreakdown: WeeklyBreakdown[] = [];
     for (let week = startWeek; week <= endWeek; week++) {
-      const prodMap = yearWeekMap.get(week); // undefined jika minggu tidak ada di data
+      const weekRecords = records.filter(r => r.year === year && r.week === week);
 
-      // Sum seluruh produk untuk minggu ini — O(products), bukan O(N)
-      let weekActual_bks  = 0;
-      let weekActual_slop = 0;
-      let weekActual_bal  = 0;
-      let weekActual_dos  = 0;
-
-      if (prodMap) {
-        prodMap.forEach(agg => {
-          weekActual_bks  += agg.bks;
-          weekActual_slop += agg.slop;
-          weekActual_bal  += agg.bal;
-          weekActual_dos  += agg.dos;
-        });
-      }
+      const weekActual_bks  = weekRecords.reduce((sum, r) => sum + getUnitValueLocal(r, 'units_bks'),  0);
+      const weekActual_slop = weekRecords.reduce((sum, r) => sum + getUnitValueLocal(r, 'units_slop'), 0);
+      const weekActual_bal  = weekRecords.reduce((sum, r) => sum + getUnitValueLocal(r, 'units_bal'),  0);
+      const weekActual_dos  = weekRecords.reduce((sum, r) => sum + getUnitValueLocal(r, 'units_dos'),  0);
 
       const weekTargetRow = weekTargetMap.get(week);
       const hasTarget     = weekTargetRow?.has_target ?? false;
@@ -1320,6 +1302,11 @@ async function generateQuarterlyData(
       } as MonthlyBreakdown & { hasTarget: boolean };
     });
 
+    const quarterActual = unitType === 'units_bks'  ? quarterRecords.reduce((sum, r) => sum + getUnitValueLocal(r, 'units_bks'),  0)
+                        : unitType === 'units_slop' ? quarterRecords.reduce((sum, r) => sum + getUnitValueLocal(r, 'units_slop'), 0)
+                        : unitType === 'units_bal'  ? quarterRecords.reduce((sum, r) => sum + getUnitValueLocal(r, 'units_bal'),  0)
+                        : quarterRecords.reduce((sum, r) => sum + getUnitValueLocal(r, 'units_dos'), 0);
+
     quarterlyData.push({
       quarter,
       target:             parseFloat(quarterTargetForUnit.toFixed(2)),
@@ -1335,53 +1322,37 @@ async function generateQuarterlyData(
   return quarterlyData;
 }
 
-// ─── generateL4WC4WData — refactored (v7) ────────────────────────────────────
-// Sebelum: menerima any[] (virtual records), iterasi ulang semuanya.
-// Sesudah: iterasi langsung weekProductMap via byWeekMap.
-function generateL4WC4WData(
-  byWeekMap:          Map<number, Map<number, Map<string, UnitAgg>>>,
-  omzetByProductWeek: Map<string, number>,
-  currentYear?:       number,
-  filters?:           FetchFilters,
-): L4WC4WData {
+function generateL4WC4WData(records: any[], currentYear?: number, filters?: FetchFilters): L4WC4WData {
   const empty: L4WC4WData = { l4wAverage: 0, c4wAverage: 0, c1wValue: 0, variance: 0, variancePercentage: 0, weeklyTrendData: [] };
-  const selectedUnit      = filters?.selectedUnit || 'units_dos';
-  const effectiveYear     = filters?.year2 ?? currentYear;
 
-  // Pilih yearWeekMap; jika tidak ada tahun spesifik, gabungkan semua
-  const yearWeekMap = effectiveYear !== undefined
-    ? (byWeekMap.get(effectiveYear) ?? new Map<number, Map<string, UnitAgg>>())
-    : (() => {
-        const merged = new Map<number, Map<string, UnitAgg>>();
-        byWeekMap.forEach(ywm => ywm.forEach((pm, w) => {
-          if (!merged.has(w)) merged.set(w, new Map());
-          pm.forEach((agg, p) => {
-            const ex = merged.get(w)!.get(p);
-            if (ex) { ex.bks += agg.bks; ex.slop += agg.slop; ex.bal += agg.bal; ex.dos += agg.dos; }
-            else merged.get(w)!.set(p, { ...agg });
-          });
-        }));
-        return merged;
-      })();
+  if (records.length === 0) return empty;
 
-  if (yearWeekMap.size === 0) return empty;
+  const effectiveYear   = filters?.year2 ?? currentYear;
+  const filteredRecords = effectiveYear !== undefined
+    ? records.filter(r => (r.year ?? new Date(r.date).getFullYear()) === effectiveYear)
+    : records;
+  const effectiveRecords = filteredRecords.length > 0 ? filteredRecords : records;
 
-  // Build weeklyTotals dari Map langsung — O(weeks × products), tanpa array virtual
-  const weeklyTotalsMap = new Map<number, number>();
-  yearWeekMap.forEach((prodMap, week) => {
-    let weekTotal = 0;
-    prodMap.forEach(agg => {
-      weekTotal += selectedUnit === 'units_bks'  ? agg.bks
-                 : selectedUnit === 'units_slop' ? agg.slop
-                 : selectedUnit === 'units_bal'  ? agg.bal
-                 : agg.dos;
-    });
-    weeklyTotalsMap.set(week, (weeklyTotalsMap.get(week) ?? 0) + weekTotal);
-  });
+  const weeklyTotalsMap = new Map<string, { year: number; week: number; total: number }>();
+  const selectedUnit    = filters?.selectedUnit || 'units_dos';
 
-  const weeklyTotals: { week: number; total: number }[] = [];
-  weeklyTotalsMap.forEach((total, week) => weeklyTotals.push({ week, total }));
-  weeklyTotals.sort((a, b) => a.week - b.week);
+  for (const record of effectiveRecords) {
+    const week = Number(record.week) || 0;
+    if (week <= 0) continue;
+    const year      = record.year ?? new Date(record.date).getFullYear();
+    const key       = `${year}-${week.toString().padStart(2, '0')}`;
+    const unitValue = getUnitValue(record, selectedUnit);
+
+    if (!weeklyTotalsMap.has(key)) {
+      weeklyTotalsMap.set(key, { year, week, total: unitValue });
+    } else {
+      weeklyTotalsMap.get(key)!.total += unitValue;
+    }
+  }
+
+  const weeklyTotals: { year: number; week: number; total: number }[] = [];
+  weeklyTotalsMap.forEach(v => weeklyTotals.push(v));
+  weeklyTotals.sort((a, b) => a.year !== b.year ? a.year - b.year : a.week - b.week);
 
   if (weeklyTotals.length < 2) {
     const c1wValue = weeklyTotals[weeklyTotals.length - 1]?.total ?? 0;
@@ -1419,8 +1390,6 @@ function generateL4WC4WData(
     },
   ];
 
-  const l4wWeekNums = l4wWeeks.map(w => w.week);
-
   return {
     l4wAverage:      Math.round(l4wAverageRaw),
     c4wAverage:      0,
@@ -1430,57 +1399,40 @@ function generateL4WC4WData(
     weeklyTrendData,
     l4wWeekRange,
     c1wWeekNumber:   c1wEntry.week,
-    productDetails:  generateProductL4WC1WData(
-      yearWeekMap,
-      omzetByProductWeek,
-      effectiveYear,
-      c1wEntry.week,
-      l4wWeekNums,
-    ),
+    productDetails:  generateProductL4WC1WData(effectiveRecords, c1wEntry.week, l4wWeeks.map(w => w.week)),
   } as L4WC4WData;
 }
 
-// ─── generateProductL4WC1WData — refactored (v7) ─────────────────────────────
-// Sebelum: menerima any[], iterasi ulang seluruh records.
-// Sesudah: menerima Map<week, Map<product, UnitAgg>>, akses langsung.
-function generateProductL4WC1WData(
-  yearWeekMap:        Map<number, Map<string, UnitAgg>>,
-  omzetByProductWeek: Map<string, number>,
-  effectiveYear:      number | undefined,
-  c1wWeek:            number,
-  l4wWeeks:           number[],
-): ProductL4WC1WData[] {
+function generateProductL4WC1WData(records: any[], c1wWeek: number, l4wWeeks: number[]): ProductL4WC1WData[] {
   type WeekEntry = { omzet: number; units_bks: number; units_slop: number; units_bal: number; units_dos: number };
 
   const productMap = new Map<string, Map<number, WeekEntry>>();
 
-  // Semua minggu yang relevan (l4w + c1w)
-  const relevantWeeks = new Set([...l4wWeeks, c1wWeek]);
+  for (const record of records) {
+    const product    = record.product || 'Produk tidak diketahui';
+    const week       = Number(record.week) || 0;
+    const omzet      = getOmzetValue(record);
+    const units_bks  = Number(record.units_bks)  || 0;
+    const units_slop = Number(record.units_slop) || 0;
+    const units_bal  = Number(record.units_bal)  || 0;
+    const units_dos  = Number(record.units_dos)  || 0;
 
-  relevantWeeks.forEach(week => {
-    const prodMap = yearWeekMap.get(week);
-    if (!prodMap) return;
-
-    prodMap.forEach((agg, product) => {
-      // Ambil omzet dari omzetByProductWeek menggunakan key yang sama seperti saat diisi
-      const omzetKey = `${effectiveYear}-${week}-${product}`;
-      const omzet    = omzetByProductWeek.get(omzetKey) ?? 0;
-
-      if (!productMap.has(product)) productMap.set(product, new Map());
-      const weekMap  = productMap.get(product)!;
-      const existing = weekMap.get(week) ?? { omzet: 0, units_bks: 0, units_slop: 0, units_bal: 0, units_dos: 0 };
-      weekMap.set(week, {
-        omzet:      existing.omzet      + omzet,
-        units_bks:  existing.units_bks  + agg.bks,
-        units_slop: existing.units_slop + agg.slop,
-        units_bal:  existing.units_bal  + agg.bal,
-        units_dos:  existing.units_dos  + agg.dos,
-      });
+    if (!productMap.has(product)) productMap.set(product, new Map());
+    const weekMap  = productMap.get(product)!;
+    const existing = weekMap.get(week) ?? { omzet: 0, units_bks: 0, units_slop: 0, units_bal: 0, units_dos: 0 };
+    weekMap.set(week, {
+      omzet:      existing.omzet      + omzet,
+      units_bks:  existing.units_bks  + units_bks,
+      units_slop: existing.units_slop + units_slop,
+      units_bal:  existing.units_bal  + units_bal,
+      units_dos:  existing.units_dos  + units_dos,
     });
-  });
+  }
 
   const fallbackEntry: WeekEntry = { omzet: 0, units_bks: 0, units_slop: 0, units_bal: 0, units_dos: 0 };
-  const year = effectiveYear ?? new Date().getFullYear();
+  const year = records.length > 0
+    ? (records[0].year ?? new Date(records[0].date).getFullYear())
+    : new Date().getFullYear();
 
   const productData: ProductL4WC1WData[] = [];
 

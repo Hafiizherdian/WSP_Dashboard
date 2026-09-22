@@ -23,23 +23,20 @@ jobs:
           script: |
             set -e
 
-            echo "=== Masuk ke direktori app ==="
-            cd ~/WSP_Dashboard
-
-            echo "=== Bersihkan perubahan lokal di VPS ==="
-            git reset --hard HEAD
+            echo "=== Masuk ke direktori app ===="
+            cd ~/app
 
             echo "=== Pull kode terbaru ==="
             git pull origin master
 
             echo "=== Install dependencies ==="
-            npm install 
+            npm ci 
 
             echo "=== Build Next.js ==="
             npm run build
 
             echo "=== Restart PM2 ==="
-            pm2 restart wsp-dashboard --update-env
+            pm2 restart dashboard --update-env
 
             echo "=== Save PM2 state ==="
             pm2 save

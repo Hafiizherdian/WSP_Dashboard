@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { withAuth } from '@/lib/auth/session';
+import { invalidateAll } from '@/lib/salesCache';
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
@@ -143,6 +144,10 @@ export async function DELETE(request: NextRequest) {
         }
 
         await client.query('COMMIT');
+
+        // 2. PANGGIL FUNGSI INVALIDATE DI SINI
+        // Setelah transaksi DB berhasil (COMMIT), kita hapus cachenya
+        invalidateAll();
 
         return NextResponse.json({
           success: true,

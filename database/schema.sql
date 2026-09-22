@@ -130,3 +130,14 @@ ON CONFLICT (username) DO NOTHING;
 -- Grant permissions (adjust as needed)
 -- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO dashboard_user;
 -- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO dashboard_user;
+
+CREATE INDEX IF NOT EXISTS idx_dist_records_area_week ON distribution_records (area, week_num);
+CREATE INDEX IF NOT EXISTS idx_dist_records_file       ON distribution_records (dist_file_id);
+CREATE INDEX IF NOT EXISTS idx_dist_records_outlet     ON distribution_records (outlet);
+CREATE INDEX IF NOT EXISTS idx_dist_records_outlet_type ON distribution_records (outlet_type);
+
+-- filter salesman/product/city pakai ILIKE '%...%', btree biasa nggak kepakai
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_dist_records_salesman_trgm ON distribution_records USING gin (salesman gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_dist_records_product_trgm  ON distribution_records USING gin (product gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_dist_records_city_trgm     ON distribution_records USING gin (city gin_trgm_ops);

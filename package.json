@@ -35,8 +35,10 @@
     "@types/pg-cursor": "^2.7.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "autoprefixer": "^10.6.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "postcss": "^8.5.28",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

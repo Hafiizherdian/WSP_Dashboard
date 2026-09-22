@@ -19,8 +19,8 @@ const tk = {
     text:          'rgba(255,255,255,0.92)',
     textSub:       'rgba(255,255,255,0.52)',
     textMuted:     'rgba(255,255,255,0.28)',
-    headerBg:      'rgba(255,255,255,0.03)',
-    headerText:    'rgba(255,255,255,0.35)',
+    headerBg:      '#fef08a',
+    headerText:    'rgb(0, 0, 0)',
     rowHover:      'rgba(255,255,255,0.03)',
     rowAlt:        'rgba(255,255,255,0.01)',
     tooltipBg:     '#13161f',
@@ -42,8 +42,8 @@ const tk = {
     text:          '#0f172a',
     textSub:       '#475569',
     textMuted:     '#94a3b8',
-    headerBg:      '#f1f5f9',
-    headerText:    '#475569',
+    headerBg:      '#fef08a',
+    headerText:    'rgb(0, 0, 0)',
     rowHover:      '#f8fafc',
     rowAlt:        '#fafbfc',
     tooltipBg:     '#ffffff',
@@ -413,7 +413,7 @@ export default function AnalysisSection({ data, theme = 'dark' }: AnalysisSectio
   const colH = (label: string, sub?: string) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase', letterSpacing: '0.1em', color: t.headerText }}>{label}</span>
-      {sub && <span style={{ fontSize: 7, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>{sub}</span>}
+      {sub && <span style={{ fontSize: 7, color: t.headerText, fontFamily: 'IBM Plex Mono,monospace' }}>{sub}</span>}
     </div>
   );
 

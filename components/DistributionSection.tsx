@@ -27,8 +27,8 @@ const tk = {
     textFaint:      'rgba(255,255,255,0.13)',
     inputBg:        'rgba(255,255,255,0.035)',
     inputBorder:    'rgba(255,255,255,0.09)',
-    tableHeadBg:    'rgba(255,255,255,0.03)',
-    tableHeadText:  'rgba(255,255,255,0.35)',
+    tableHeadBg:    '#fef08a',
+    tableHeadText:  'rgb(0, 0, 0)',
     rowHover:       'rgba(255,255,255,0.03)',
     rowAlt:         'rgba(255,255,255,0.01)',
     tooltipBg:      '#13161f',
@@ -37,7 +37,7 @@ const tk = {
     posBg:    'rgba(16,185,129,0.1)',  posText:  '#34d399', posBorder:  'rgba(16,185,129,0.2)',
     negBg:    'rgba(239,68,68,0.1)',   negText:  '#f87171', negBorder:  'rgba(239,68,68,0.2)',
     warnBg:   'rgba(245,158,11,0.09)', warnText: '#fbbf24', warnBorder: 'rgba(245,158,11,0.2)',
-    tabActive:      'rgba(28,151,6,0.16)', tabActiveText: '#4ade80',
+    tabActive:      'rgb(254, 255, 254)', tabActiveText: '#006826',
     tabBg:          'rgba(255,255,255,0.04)',
     selectBg:       '#0b0d13',
     accordionBg:    'rgba(255,255,255,0.02)',
@@ -53,8 +53,8 @@ const tk = {
     textFaint:      '#cbd5e1',
     inputBg:        'rgba(0,0,0,0.03)',
     inputBorder:    'rgba(0,0,0,0.1)',
-    tableHeadBg:    '#f1f5f9',
-    tableHeadText:  '#475569',
+    tableHeadBg:    '#fef08a',
+    tableHeadText:  'rgb(0, 0, 0)',
     rowHover:       '#f8fafc',
     rowAlt:         '#fafbfc',
     tooltipBg:      '#ffffff',
@@ -357,7 +357,7 @@ function DistributionTabs({
                 cursor: 'pointer', fontSize: 11,
                 fontWeight: isActive ? 700 : 500,
                 fontFamily: 'IBM Plex Mono, monospace',
-                color: isActive ? t.tabActiveText : t.textMuted,
+                color: isActive ? t.tabActiveText : t.tableHeadText,
                 whiteSpace: 'nowrap', transition: 'all 0.15s', marginBottom: -1,
               }}
             >
@@ -419,7 +419,7 @@ function AchievementContent({
         <div style={{ display: 'flex', gap: 4, background: t.tabBg, borderRadius: 8, padding: 3, width: 'fit-content' }}>
           {tabs.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setView(id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', border: 'none', cursor: 'pointer', background: view === id ? t.tabActive : 'transparent', color: view === id ? t.tabActiveText : t.textMuted, transition: 'all 0.15s' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', border: 'none', cursor: 'pointer', background: view === id ? t.tabActive : 'transparent', color: view === id ? t.tabActiveText : t.text, transition: 'all 0.15s' }}>
               <Icon size={11} />{label}
             </button>
           ))}

@@ -42,7 +42,7 @@
     "tailwindcss": "^4.3.0",
     "typescript": "^5"
   },
-  "description": "Sales Analysis Dashboard dengan perbandingan year-over-year ",
+  "description": "Sales Analysis Dashboard WSP dengan perbandingan year-over-year ",
   "keywords": [
     "nextjs",
     "typescript",
@@ -50,10 +50,10 @@
     "sales",
     "analytics",
     "cakragkndashboard",
-    "CGKNDashboard",
+    "CGKN WSP Dashboard",
     "cgkndashboard"
   ],
-  "author": "",
+  "author": "Hafiizh Herdian",
   "license": "ISC",
   "type": "module"
 }

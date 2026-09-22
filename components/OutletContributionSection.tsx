@@ -36,7 +36,7 @@ const TK = {
     card4:  { bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.18)', text: '#fca5a5', val: 'rgba(255,255,255,0.9)' },
     gridStroke: 'rgba(255,255,255,0.06)', tooltipBg: '#0c0e14',
     tooltipBorder: 'rgba(255,255,255,0.12)', tooltipText: 'rgba(255,255,255,0.85)',
-    tableHeadBg: '#0c0e14', tableHeadText: 'rgba(255,255,255,0.3)',
+    tableHeadBg: '#fef08a', tableHeadText: '#0f172a',
     tableAlt: 'rgba(255,255,255,0.02)', tableHover: 'rgba(255,255,255,0.04)',
     modalOverlay: 'rgba(0,0,0,0.8)', modalBg: '#111318', modalBorder: 'rgba(255,255,255,0.08)',
     yearA: { bg: '#0f1724', border: '#1e3a5f', label: '#93c5fd', accent: '#3b82f6' },
@@ -67,7 +67,7 @@ const TK = {
     card4:  { bg: '#fef2f2', border: '#fecaca', text: '#b91c1c', val: '#0f172a' },
     gridStroke: 'rgba(0,0,0,0.07)', tooltipBg: '#ffffff',
     tooltipBorder: 'rgba(0,0,0,0.1)', tooltipText: '#0f172a',
-    tableHeadBg: '#f8fafc', tableHeadText: '#94a3b8',
+    tableHeadBg: '#fef08a', tableHeadText: '#0f172a',
     tableAlt: 'rgba(0,0,0,0.02)', tableHover: 'rgba(0,0,0,0.03)',
     modalOverlay: 'rgba(0,0,0,0.5)', modalBg: '#ffffff', modalBorder: 'rgba(0,0,0,0.08)',
     yearA: { bg: '#eff6ff', border: '#bfdbfe', label: '#1d4ed8', accent: '#2563eb' },
@@ -484,25 +484,110 @@ function ChartTooltip({ active, payload, label, theme, prefix = '', customerMap 
   );
 }
 
-function ChartBox({ title, chartKey, height = 260, onExpand, year, theme, compact, children, badge }: {
+// ─── TableBtn ─────────────────────────────────────────────────────────────────
+// Toggle Chart <-> Tabel, dipakai di semua ChartBox (weekly, pie, distribusi, customer).
+function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
+  const t = TK[theme];
+  return (
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: active ? `${t.blue.text}22` : t.inputBg, color: active ? t.blue.text : t.textMuted, border: `1px solid ${active ? t.blue.text : t.borderInput}`, cursor: 'pointer', flexShrink: 0, transition: 'all .15s' }}>
+      {active
+        ? <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><polyline points="1,12 5,7 8,9 11,4 15,2" /></svg>
+        : <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="1" y="1" width="14" height="14" rx="2" /><line x1="1" y1="5.5" x2="15" y2="5.5" /><line x1="1" y1="10.5" x2="15" y2="10.5" /><line x1="5.5" y1="5.5" x2="5.5" y2="15" /></svg>
+      }
+      {active ? 'Chart' : 'Tabel'}
+    </button>
+  );
+}
+
+// ─── DataTable ────────────────────────────────────────────────────────────────
+// Tabel generic sortable (klik header). Dipakai untuk semua chart di YearPanel —
+// bentuk kolom & baris beda-beda per chart, jadi cukup lempar `columns`+`rows`.
+type TableCol = { key: string; label: string; right?: boolean; format?: (v: any) => string; bold?: boolean };
+
+function DataTable({ columns, rows, theme, defaultSortKey, defaultSortDir = 'asc' }: {
+  columns: TableCol[]; rows: Record<string, any>[]; theme: Theme;
+  defaultSortKey?: string; defaultSortDir?: 'asc' | 'desc';
+}) {
+  const t = TK[theme];
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({
+    key: defaultSortKey ?? columns[0].key, dir: defaultSortDir,
+  });
+
+  const sorted = useMemo(() => {
+    const arr = [...rows];
+    arr.sort((a, b) => {
+      const av = a[sort.key]; const bv = b[sort.key];
+      let cmp: number;
+      if (typeof av === 'string' || typeof bv === 'string') cmp = String(av ?? '').localeCompare(String(bv ?? ''));
+      else cmp = (Number(av) || 0) - (Number(bv) || 0);
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [rows, sort]);
+
+  const handleSort = (key: string) =>
+    setSort(p => (p.key === key ? { key, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }));
+
+  return (
+    <div style={{ height: '100%', overflow: 'auto', border: `1px solid ${t.border}`, borderRadius: 8 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'IBM Plex Mono, monospace' }}>
+        <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            {columns.map(c => {
+              const active = sort.key === c.key;
+              return (
+                <th key={c.key} onClick={() => handleSort(c.key)}
+                  style={{ padding: '8px 12px', textAlign: c.right ? 'right' : 'left', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, color: t.tableHeadText, background: t.tableHeadBg, borderBottom: `1px solid ${t.border}`, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: c.right ? 'flex-end' : 'flex-start', gap: 3, width: '100%' }}>
+                    {c.label}
+                    <span style={{ opacity: active ? 1 : 0.3, fontSize: 8 }}>{active && sort.dir === 'asc' ? '▲' : active && sort.dir === 'desc' ? '▼' : '⇅'}</span>
+                  </span>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.length === 0 ? (
+            <tr><td colSpan={columns.length} style={{ padding: 20, textAlign: 'center', fontSize: 11, color: t.textMuted }}>Tidak ada data</td></tr>
+          ) : sorted.map((r, i) => (
+            <tr key={i} style={{ background: i % 2 !== 0 ? t.tableAlt : 'transparent' }}>
+              {columns.map(c => (
+                <td key={c.key} style={{ padding: '7px 12px', fontSize: 11, textAlign: c.right ? 'right' : 'left', color: t.text, fontWeight: c.bold ? 700 : 400, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>
+                  {c.format ? c.format(r[c.key]) : (r[c.key] ?? '—')}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ChartBox({ title, chartKey, height = 260, onExpand, year, theme, compact, children, badge, tableActive, onToggleTable }: {
   title: string; chartKey: string; height?: number;
   onExpand: (chartKey: string, year: number) => void;
   year: number; theme: Theme; compact?: boolean; children: React.ReactNode; badge?: string;
+  tableActive?: boolean; onToggleTable?: () => void;
 }) {
   const t = TK[theme];
   const { isMobile } = useBreakpoint();
   return (
     <div style={{ background: t.cardBg, border: `1px solid ${t.borderCard}`, borderRadius: 10, padding: compact || isMobile ? '10px 10px' : '14px 16px', boxShadow: t.shadow, transition: 'background 0.3s' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 6, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: compact || isMobile ? 11 : 12, fontWeight: 600, fontFamily: 'IBM Plex Sans, sans-serif', color: t.text }}>{title}</span>
           {badge && <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 8, background: t.inputBg, color: t.textMuted, border: `1px solid ${t.border}`, fontFamily: 'IBM Plex Mono, monospace' }}>{badge}</span>}
         </div>
-        <button onClick={() => onExpand(chartKey, year)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: t.inputBg, color: t.textMuted, border: `1px solid ${t.borderInput}`, cursor: 'pointer', flexShrink: 0 }}>
-          <Maximize2 size={9} /> Perbesar
-        </button>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {onToggleTable && <TableBtn onClick={onToggleTable} theme={theme} active={!!tableActive} />}
+          <button onClick={() => onExpand(chartKey, year)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', background: t.inputBg, color: t.textMuted, border: `1px solid ${t.borderInput}`, cursor: 'pointer', flexShrink: 0 }}>
+            <Maximize2 size={9} /> Perbesar
+          </button>
+        </div>
       </div>
-      <div style={{ height, background: t.chartAreaBg, border: `1px solid ${t.chartAreaBorder}`, borderRadius: 8, padding: '8px 4px 4px' }}>
+      <div style={{ height, background: t.chartAreaBg, border: `1px solid ${t.chartAreaBorder}`, borderRadius: 8, padding: '8px 4px 4px', overflow: tableActive ? 'auto' : 'visible' }}>
         {children}
       </div>
     </div>
@@ -538,7 +623,7 @@ function SortTh({ label, sortKey, sortState, onSort, theme, align = 'left' }: { 
   const t = TK[theme];
   const active = sortState.key === sortKey;
   return (
-    <th onClick={() => onSort(sortKey)} style={{ padding: '8px 14px', textAlign: align, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: active ? t.textSub : t.tableHeadText, background: active ? t.divider : t.tableHeadBg, borderBottom: `1px solid ${t.border}`, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', transition: 'background 0.15s', fontFamily: 'IBM Plex Mono, monospace' }}>
+    <th onClick={() => onSort(sortKey)} style={{ padding: '8px 14px', textAlign: align, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: active ? t.tableHeadText : t.tableHeadText, background: active ? t.divider : t.tableHeadBg, borderBottom: `1px solid ${t.border}`, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', transition: 'background 0.15s', fontFamily: 'IBM Plex Mono, monospace' }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         {label}
         <span style={{ opacity: active ? 1 : 0.3, fontSize: 8 }}>
@@ -568,6 +653,9 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
 
   const [sortState,     setSortState]     = useState<{ key: string; dir: SortDir }>({ key: 'week', dir: 'asc' });
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
+  // Toggle Chart <-> Tabel per chart (weekly/category/outlet/product/city/district/customer)
+  const [tableModes, setTableModes] = useState<Record<string, boolean>>({});
+  const toggleTableMode = (key: string) => setTableModes(p => ({ ...p, [key]: !p[key] }));
 
   const handleSort = (key: string) => {
     setSortState(prev =>
@@ -683,6 +771,32 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
   const barProduct  = useMemo(() => makeBarDist(r => r.product  || 'Unknown', 'product'),  [makeBarDist]);
   const barCity     = useMemo(() => makeBarDist(r => r.city     || 'Unknown', 'city'),     [makeBarDist]);
   const barDistrict = useMemo(() => makeBarDist(r => r.district || 'Unknown', 'district'), [makeBarDist]);
+
+  // ── Kolom tabel per chart (generated dari outletTypes yang tersedia) ──────
+  const weeklyColumns: TableCol[] = useMemo(() => [
+    { key: 'week', label: 'Minggu' },
+    { key: 'dozNet', label: `${getUnitShortLabel(selectedUnit)} Net`, right: true, bold: true, format: v => fmtValExact(v) },
+    { key: 'pct', label: '%', right: true, format: v => `${(v as number).toFixed(2)}%` },
+  ], [selectedUnit, fmtValExact]);
+
+  const pieColumns: TableCol[] = useMemo(() => [
+    { key: 'name', label: 'Nama' },
+    { key: 'value', label: `${getUnitShortLabel(selectedUnit)} Net`, right: true, bold: true, format: v => fmtValExact(v) },
+    { key: 'pct', label: 'Kontribusi', right: true, format: v => `${(v as number).toFixed(1)}%` },
+  ], [selectedUnit, fmtValExact]);
+
+  const distColumns = useCallback((xKey: string, xLabel: string): TableCol[] => [
+    { key: xKey, label: xLabel },
+    ...outletTypes.map(ot => ({ key: ot, label: ot, right: true, format: (v: number) => v ? fmtValExact(v) : '—' })),
+    { key: '_total', label: 'Total', right: true, bold: true, format: (v: number) => fmtValExact(v) },
+  ], [outletTypes, fmtValExact]);
+
+  const customerColumns: TableCol[] = useMemo(() => [
+    { key: 'customer', label: 'Customer' },
+    { key: '_customerId', label: 'ID', format: v => v ? `#${v}` : '—' },
+    ...outletTypes.map(ot => ({ key: ot, label: ot, right: true, format: (v: number) => v ? fmtValExact(v) : '—' })),
+    { key: '_total', label: 'Total', right: true, bold: true, format: (v: number) => fmtValExact(v) },
+  ], [outletTypes, fmtValExact]);
 
   const metrics = useMemo(() => {
     const totalWeeksInRange = weeklyData.length;
@@ -834,9 +948,13 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
   const wrapModal = (el: React.ReactNode) => (
     <div style={{ height: MODAL_H, background: t.chartAreaBg, border: `1px solid ${t.chartAreaBorder}`, borderRadius: 8, padding: '8px 4px 4px' }}>{el}</div>
   );
+  const wrapModalTable = (el: React.ReactNode) => (
+    <div style={{ height: MODAL_H }}>{el}</div>
+  );
 
   const renderChartContent = (chartKey: string, modalMode = false) => {
     const axisF = modalMode ? 11 : axisFs;
+    const inTable = !!tableModes[chartKey];
 
     const weeklyEl = (
       <ResponsiveContainer width="100%" height="100%">
@@ -854,13 +972,35 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
     );
 
     if (!modalMode) return null;
-    if (chartKey === 'weekly')   return wrapModal(weeklyEl);
-    if (chartKey === 'category') return wrapModal(renderPie(pieCategory, true));
-    if (chartKey === 'outlet')   return wrapModal(renderPie(pieOutlet,   true));
-    if (chartKey === 'product')  return wrapModal(renderBar(barProduct,  'product',  'Produk: ', true));
-    if (chartKey === 'city')     return wrapModal(renderBar(barCity,     'city',     'Kota: ',   true));
-    if (chartKey === 'district') return wrapModal(renderBar(barDistrict, 'district', 'Kec: ',    true));
-    if (chartKey === 'customer') return wrapModal(renderBarCustomer(barCustomer, true));
+
+    if (chartKey === 'weekly') {
+      if (inTable) return wrapModalTable(<DataTable columns={weeklyColumns} rows={weeklyChart} theme={theme} defaultSortKey="wkNum" />);
+      return wrapModal(weeklyEl);
+    }
+    if (chartKey === 'category') {
+      if (inTable) return wrapModalTable(<DataTable columns={pieColumns} rows={pieCategory} theme={theme} defaultSortKey="value" defaultSortDir="desc" />);
+      return wrapModal(renderPie(pieCategory, true));
+    }
+    if (chartKey === 'outlet') {
+      if (inTable) return wrapModalTable(<DataTable columns={pieColumns} rows={pieOutlet} theme={theme} defaultSortKey="value" defaultSortDir="desc" />);
+      return wrapModal(renderPie(pieOutlet, true));
+    }
+    if (chartKey === 'product') {
+      if (inTable) return wrapModalTable(<DataTable columns={distColumns('product', 'Produk')} rows={barProduct} theme={theme} defaultSortKey="_total" defaultSortDir="desc" />);
+      return wrapModal(renderBar(barProduct, 'product', 'Produk: ', true));
+    }
+    if (chartKey === 'city') {
+      if (inTable) return wrapModalTable(<DataTable columns={distColumns('city', 'Kota/Kab.')} rows={barCity} theme={theme} defaultSortKey="_total" defaultSortDir="desc" />);
+      return wrapModal(renderBar(barCity, 'city', 'Kota: ', true));
+    }
+    if (chartKey === 'district') {
+      if (inTable) return wrapModalTable(<DataTable columns={distColumns('district', 'Kecamatan')} rows={barDistrict} theme={theme} defaultSortKey="_total" defaultSortDir="desc" />);
+      return wrapModal(renderBar(barDistrict, 'district', 'Kec: ', true));
+    }
+    if (chartKey === 'customer') {
+      if (inTable) return wrapModalTable(<DataTable columns={customerColumns} rows={barCustomer} theme={theme} defaultSortKey="_total" defaultSortDir="desc" />);
+      return wrapModal(renderBarCustomer(barCustomer, true));
+    }
     return null;
   };
 
@@ -881,35 +1021,90 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
       </div>
 
       {/* Weekly bar */}
-      <ChartBox title="Kontribusi Per Minggu" chartKey="weekly" height={chartH} onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact} badge={`avg ${fmtVal(avgLine)}`}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={weeklyChart} margin={{ top: 8, right: 8, left: -8, bottom: isMobile || compact ? 44 : 55 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={t.gridStroke} vertical={false} />
-            <XAxis dataKey="week" angle={-35} textAnchor="end" height={isMobile || compact ? 44 : 55} tick={{ fontSize: axisFs, fill: t.textMuted, fontFamily: 'IBM Plex Mono, monospace' }} interval={isMobile ? 'preserveStartEnd' : 0} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: axisFs, fill: t.textMuted, fontFamily: 'IBM Plex Mono, monospace' }} width={isMobile || compact ? 32 : 40} axisLine={false} tickLine={false} tickFormatter={fmtVal} />
-            <Tooltip content={<ChartTooltip theme={theme} />} cursor={{ fill: t.divider, radius: 4 }} />
-            <ReferenceLine y={avgLine} stroke={yc.accent} strokeDasharray="4 3" strokeOpacity={0.6} strokeWidth={1.5} />
-            <Bar dataKey="dozNet" name={`${getUnitShortLabel(selectedUnit)} Net`} radius={[3, 3, 0, 0]}>
-              {weeklyChart.map((entry, index) => <Cell key={index} fill={entry.dozNet >= avgLine ? yc.accent : `${yc.accent}80`} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+      <ChartBox
+        title="Kontribusi Per Minggu" chartKey="weekly" height={chartH}
+        onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}
+        badge={`avg ${fmtVal(avgLine)}`}
+        tableActive={!!tableModes.weekly} onToggleTable={() => toggleTableMode('weekly')}
+      >
+        {tableModes.weekly ? (
+          <DataTable columns={weeklyColumns} rows={weeklyChart} theme={theme} defaultSortKey="wkNum" />
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={weeklyChart} margin={{ top: 8, right: 8, left: -8, bottom: isMobile || compact ? 44 : 55 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={t.gridStroke} vertical={false} />
+              <XAxis dataKey="week" angle={-35} textAnchor="end" height={isMobile || compact ? 44 : 55} tick={{ fontSize: axisFs, fill: t.textMuted, fontFamily: 'IBM Plex Mono, monospace' }} interval={isMobile ? 'preserveStartEnd' : 0} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: axisFs, fill: t.textMuted, fontFamily: 'IBM Plex Mono, monospace' }} width={isMobile || compact ? 32 : 40} axisLine={false} tickLine={false} tickFormatter={fmtVal} />
+              <Tooltip content={<ChartTooltip theme={theme} />} cursor={{ fill: t.divider, radius: 4 }} />
+              <ReferenceLine y={avgLine} stroke={yc.accent} strokeDasharray="4 3" strokeOpacity={0.6} strokeWidth={1.5} />
+              <Bar dataKey="dozNet" name={`${getUnitShortLabel(selectedUnit)} Net`} radius={[3, 3, 0, 0]}>
+                {weeklyChart.map((entry, index) => <Cell key={index} fill={entry.dozNet >= avgLine ? yc.accent : `${yc.accent}80`} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </ChartBox>
 
       {/* Pies */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
-        <ChartBox title="per Kategori Produk" chartKey="category" height={pieH} onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}>{renderPie(pieCategory)}</ChartBox>
-        <ChartBox title="per Tipe Outlet"     chartKey="outlet"   height={pieH} onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}>{renderPie(pieOutlet)}</ChartBox>
+        <ChartBox
+          title="per Kategori Produk" chartKey="category" height={pieH}
+          onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}
+          tableActive={!!tableModes.category} onToggleTable={() => toggleTableMode('category')}
+        >
+          {tableModes.category
+            ? <DataTable columns={pieColumns} rows={pieCategory} theme={theme} defaultSortKey="value" defaultSortDir="desc" />
+            : renderPie(pieCategory)}
+        </ChartBox>
+        <ChartBox
+          title="per Tipe Outlet" chartKey="outlet" height={pieH}
+          onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}
+          tableActive={!!tableModes.outlet} onToggleTable={() => toggleTableMode('outlet')}
+        >
+          {tableModes.outlet
+            ? <DataTable columns={pieColumns} rows={pieOutlet} theme={theme} defaultSortKey="value" defaultSortDir="desc" />
+            : renderPie(pieOutlet)}
+        </ChartBox>
       </div>
 
       {/* Bar distributions */}
-      <ChartBox title="per Produk (Top 10)"     chartKey="product"  height={barDistH} onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}>{renderBar(barProduct,  'product',  'Produk: ')}</ChartBox>
-      <ChartBox title="per Kota/Kab. (Top 10)"  chartKey="city"     height={barDistH} onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}>{renderBar(barCity,     'city',     'Kota: ')}</ChartBox>
-      <ChartBox title="per Kecamatan (Top 10)"  chartKey="district" height={barDistH} onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}>{renderBar(barDistrict, 'district', 'Kec: ')}</ChartBox>
+      <ChartBox
+        title="per Produk (Top 10)" chartKey="product" height={barDistH}
+        onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}
+        tableActive={!!tableModes.product} onToggleTable={() => toggleTableMode('product')}
+      >
+        {tableModes.product
+          ? <DataTable columns={distColumns('product', 'Produk')} rows={barProduct} theme={theme} defaultSortKey="_total" defaultSortDir="desc" />
+          : renderBar(barProduct, 'product', 'Produk: ')}
+      </ChartBox>
+      <ChartBox
+        title="per Kota/Kab. (Top 10)" chartKey="city" height={barDistH}
+        onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}
+        tableActive={!!tableModes.city} onToggleTable={() => toggleTableMode('city')}
+      >
+        {tableModes.city
+          ? <DataTable columns={distColumns('city', 'Kota/Kab.')} rows={barCity} theme={theme} defaultSortKey="_total" defaultSortDir="desc" />
+          : renderBar(barCity, 'city', 'Kota: ')}
+      </ChartBox>
+      <ChartBox
+        title="per Kecamatan (Top 10)" chartKey="district" height={barDistH}
+        onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}
+        tableActive={!!tableModes.district} onToggleTable={() => toggleTableMode('district')}
+      >
+        {tableModes.district
+          ? <DataTable columns={distColumns('district', 'Kecamatan')} rows={barDistrict} theme={theme} defaultSortKey="_total" defaultSortDir="desc" />
+          : renderBar(barDistrict, 'district', 'Kec: ')}
+      </ChartBox>
 
       {/* Customer */}
-      <ChartBox title="per Customer (Top 10)" chartKey="customer" height={barDistH + 30} onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}>
-        {renderBarCustomer(barCustomer)}
+      <ChartBox
+        title="per Customer (Top 10)" chartKey="customer" height={barDistH + 30}
+        onExpand={ch => setExpandedChart(ch)} year={year} theme={theme} compact={isMobile || compact}
+        tableActive={!!tableModes.customer} onToggleTable={() => toggleTableMode('customer')}
+      >
+        {tableModes.customer
+          ? <DataTable columns={customerColumns} rows={barCustomer} theme={theme} defaultSortKey="_total" defaultSortDir="desc" />
+          : renderBarCustomer(barCustomer)}
       </ChartBox>
 
       {/* Detail table */}
@@ -921,7 +1116,7 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ minWidth: '100%', borderCollapse: 'collapse', fontSize: isMobile || compact ? 11 : 12, fontFamily: 'IBM Plex Mono, monospace' }}>
             <thead>
-              <tr style={{ background: t.tableHeadBg }}>
+              <tr style={{ color: t.tableHeadText, background: t.tableHeadBg, }}>
                 <SortTh label="Minggu"  sortKey="week"   sortState={sortState} onSort={handleSort} theme={theme} />
                 <SortTh label={`${getUnitShortLabel(selectedUnit)} Net`} sortKey="dozNet" sortState={sortState} onSort={handleSort} theme={theme} align="right" />
                 <SortTh label="%"       sortKey="pct"    sortState={sortState} onSort={handleSort} theme={theme} align="right" />
@@ -954,7 +1149,7 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
                         <span style={{ color: w.dozNet === 0 ? t.textMuted : t.textSub }}>{fmtValExact(w.dozNet)}</span>
                       </div>
                     </td>
-                    <td style={{ padding: isMobile || compact ? '7px 10px' : '8px 14px', color: t.textMuted, textAlign: 'right' }}>{w.dozNet === 0 ? '—' : `${w.pct.toFixed(2)}%`}</td>
+                    <td style={{ padding: isMobile || compact ? '7px 10px' : '8px 14px', color: t.text, textAlign: 'right' }}>{w.dozNet === 0 ? '—' : `${w.pct.toFixed(2)}%`}</td>
                     <td style={{ padding: isMobile || compact ? '7px 10px' : '8px 14px' }}>
                       <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 700, background: st.bg, color: st.text, border: `1px solid ${st.border}` }}>{st.label}</span>
                     </td>
@@ -965,9 +1160,9 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
             {sortedTable.length > 0 && (
               <tfoot>
                 <tr style={{ background: t.tableHeadBg, borderTop: `1px solid ${t.border}` }}>
-                  <td style={{ padding: '8px 14px', fontSize: 10, fontWeight: 700, color: t.textSub }}>Total</td>
-                  <td style={{ padding: '8px 14px', textAlign: 'right', fontSize: 11, fontWeight: 800, color: t.text }}>{fmtValExact(totalDoz)}</td>
-                  <td style={{ padding: '8px 14px', textAlign: 'right', fontSize: 10, color: t.textMuted }}>100%</td>
+                  <td style={{ padding: '8px 14px', fontSize: 10, fontWeight: 700, color: t.tableHeadText }}>Total</td>
+                  <td style={{ padding: '8px 14px', textAlign: 'right', fontSize: 11, fontWeight: 800, color: t.tableHeadText }}>{fmtValExact(totalDoz)}</td>
+                  <td style={{ padding: '8px 14px', textAlign: 'right', fontSize: 10, color: t.tableHeadText }}>100%</td>
                   <td />
                 </tr>
               </tfoot>
@@ -986,7 +1181,7 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
             expandedChart === 'city'     ? 'per Kota/Kab. (Top 10)' :
             expandedChart === 'district' ? 'per Kecamatan (Top 10)' :
             expandedChart === 'customer' ? 'per Customer (Top 10)'  : ''
-          }`}
+          }${tableModes[expandedChart] ? ' — Tabel Data' : ''}`}
           onClose={() => setExpandedChart(null)}
           theme={theme}
         >

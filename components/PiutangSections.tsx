@@ -23,10 +23,11 @@ const tk = {
     border:      'rgba(255,255,255,0.055)',
     borderCard:  'rgba(255,255,255,0.075)',
     borderInput: 'rgba(255,255,255,0.09)',
-    tableHead:   '#0b0d13',
+    tableHead:   '#fef08a',
+    tableHeadText: 'rgb(0, 0, 0)',
     tableAlt:    'rgba(255,255,255,0.015)',
     rowHover:    'rgba(255,255,255,0.04)',
-    text:        'rgba(255,255,255,0.92)',
+    text:        '#0f172a',
     textSub:     'rgba(255,255,255,0.52)',
     textMuted:   'rgba(255,255,255,0.28)',
     textFaint:   'rgba(255,255,255,0.13)',
@@ -52,7 +53,8 @@ const tk = {
     border:      'rgba(0,0,0,0.065)',
     borderCard:  'rgba(0,0,0,0.08)',
     borderInput: 'rgba(0,0,0,0.1)',
-    tableHead:   '#f8fafc',
+    tableHead:   '#fef08a',
+    tableHeadText: 'rgb(0, 0, 0)',
     tableAlt:    'rgba(0,0,0,0.018)',
     rowHover:    'rgba(0,0,0,0.035)',
     text:        '#0f172a',
@@ -408,12 +410,12 @@ export default function PiutangComponent({ data, weeklyData = [], theme = 'light
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           background: t.tableHead,
         }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: t.tableHeadText, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             Daftar Piutang 
           </span>
           <span style={{
             fontSize: 10, fontFamily: 'IBM Plex Mono, monospace',
-            background: t.inputBg, color: t.textSub,
+            background: t.inputBg, color: t.tableHeadText,
             padding: '2px 9px', borderRadius: 12, border: `1px solid ${t.border}`,
           }}>
             Outstanding: Rp {fIDR(metrics.totalOutstanding)}
@@ -423,7 +425,7 @@ export default function PiutangComponent({ data, weeklyData = [], theme = 'light
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12 }}>
             <thead>
-              <tr style={{ background: t.tableHead, borderBottom: `1px solid ${t.border}` }}>
+              <tr style={{ background: t.tableHead, color: t.tableHeadText, borderBottom: `1px solid ${t.border}` }}>
                 {([
                   { label: 'Faktur',      key: 'faktur'     },
                   { label: 'Kode',        key: 'kode'       },
@@ -445,7 +447,7 @@ export default function PiutangComponent({ data, weeklyData = [], theme = 'light
                       padding: '10px 14px', fontSize: 9,
                       fontFamily: 'IBM Plex Mono, monospace',
                       textTransform: 'uppercase', letterSpacing: '0.07em',
-                      color: sortBy === col.key ? t.text : t.textMuted,
+                      color: sortBy === col.key ? t.text : t.tableHeadText,
                       fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer',
                       textAlign: col.numeric ? 'right' : 'left', userSelect: 'none',
                     }}
@@ -461,7 +463,7 @@ export default function PiutangComponent({ data, weeklyData = [], theme = 'light
             <tbody>
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={12} style={{ padding: '48px 10px', textAlign: 'center', fontSize: 12, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace' }}>
+                  <td colSpan={12} style={{ padding: '48px 10px', textAlign: 'center', fontSize: 12, color: t.tableHeadText, fontFamily: 'IBM Plex Mono, monospace' }}>
                     Tidak ada transaksi piutang yang cocok.
                   </td>
                 </tr>
@@ -483,13 +485,13 @@ export default function PiutangComponent({ data, weeklyData = [], theme = 'light
                     onMouseEnter={e => (e.currentTarget.style.background = t.rowHover)}
                     onMouseLeave={e => (e.currentTarget.style.background = rowBg)}
                   >
-                    <td style={{ padding: '10px 14px', fontFamily: 'IBM Plex Mono, monospace', color: t.text, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '10px 14px', fontFamily: 'IBM Plex Mono, monospace', color: t.textSub, fontWeight: 600, whiteSpace: 'nowrap' }}>
                       {row.faktur}
                     </td>
                     <td style={{ padding: '10px 14px', fontFamily: 'IBM Plex Mono, monospace', color: t.textSub, fontSize: 11, whiteSpace: 'nowrap' }}>
                       {row.kode}
                     </td>
-                    <td style={{ padding: '10px 14px', color: t.text, fontWeight: 600 }}>
+                    <td style={{ padding: '10px 14px', color: t.textSub, fontWeight: 600 }}>
                       {row.outlet}
                     </td>
                     <td style={{ padding: '10px 14px', color: t.textSub }}>
@@ -511,13 +513,13 @@ export default function PiutangComponent({ data, weeklyData = [], theme = 'light
                       {row.jatuhTempo || '—'}
                     </td>
                     <td style={{ padding: '10px 14px', fontFamily: 'IBM Plex Mono, monospace', textAlign: 'right', fontWeight: 600, color: agingColor }}>
-                      {row.hari !== null ? fIDR(row.hari) : <span style={{ color: t.textFaint }}>—</span>}
+                      {row.hari !== null ? fIDR(row.hari) : <span style={{ color: t.textSub }}>—</span>}
                     </td>
-                    <td style={{ padding: '10px 14px', fontFamily: 'IBM Plex Mono, monospace', textAlign: 'right', fontWeight: 700, color: row.piutang > 10_000_000 ? t.yellow.text : t.text }}>
-                      {row.piutang > 0 ? fIDR(row.piutang) : <span style={{ color: t.textFaint }}>0</span>}
+                    <td style={{ padding: '10px 14px', fontFamily: 'IBM Plex Mono, monospace', textAlign: 'right', fontWeight: 700, color: row.piutang > 10_000_000 ? t.yellow.text : t.textSub }}>
+                      {row.piutang > 0 ? fIDR(row.piutang) : <span style={{ color: t.textSub }}>0</span>}
                     </td>
                     <td style={{ padding: '10px 14px', fontFamily: 'IBM Plex Mono, monospace', textAlign: 'right', fontWeight: 700, color: row.giro > 0 ? t.green.text : t.textSub }}>
-                      {row.giro > 0 ? fIDR(row.giro) : <span style={{ color: t.textFaint }}>0</span>}
+                      {row.giro > 0 ? fIDR(row.giro) : <span style={{ color: t.textSub }}>0</span>}
                     </td>
                   </tr>
                 );

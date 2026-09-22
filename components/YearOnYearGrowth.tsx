@@ -21,8 +21,8 @@ const TK = {
     cardBg:        '#111318',
     border:        'rgba(255,255,255,0.06)',
     borderCard:    'rgba(255,255,255,0.07)',
-    tableHeadBg:   '#0c0e14',
-    tableHeadText: 'rgba(255,255,255,0.3)',
+    tableHeadBg:   '#fef08a',
+    tableHeadText: 'rgb(0, 0, 0)',
     rowHover:      'rgba(255,255,255,0.04)',
     rowAlt:        'rgba(255,255,255,0.015)',
     text:          'rgba(255,255,255,0.9)',
@@ -51,8 +51,8 @@ const TK = {
     cardBg:        '#ffffff',
     border:        'rgba(0,0,0,0.07)',
     borderCard:    'rgba(0,0,0,0.08)',
-    tableHeadBg:   '#f8fafc',
-    tableHeadText: '#94a3b8',
+    tableHeadBg:   '#fef08a',
+    tableHeadText: 'rgb(0, 0, 0)',
     rowHover:      'rgba(0,0,0,0.035)',
     rowAlt:        'rgba(0,0,0,0.018)',
     text:          '#0f172a',
@@ -128,6 +128,43 @@ function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
       }}
     >
       <Maximize2 size={10} /> Perbesar
+    </button>
+  );
+}
+
+function TableBtn({
+  onClick,
+  theme,
+  active = false,
+}: {
+  onClick: () => void;
+  theme: Theme;
+  active?: boolean;
+}) {
+  const t = TK[theme];
+
+  return (
+    <button
+      onClick={onClick}
+      title={active ? 'Tampilkan chart' : 'Tampilkan tabel'}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '4px 10px',
+        borderRadius: 6,
+        background: active ? t.btnBg : t.inputBg,
+        border: `1px solid ${active ? t.btnBorder : t.inputBorder}`,
+        color: active ? t.btnText : t.textMuted,
+        cursor: 'pointer',
+        fontSize: 10,
+        fontWeight: 600,
+        fontFamily: 'IBM Plex Mono, monospace',
+        flexShrink: 0,
+        transition: 'background 0.15s, color 0.15s',
+      }}
+    >
+      {active ? 'Chart' : 'Tabel'}
     </button>
   );
 }
@@ -260,13 +297,369 @@ interface YearOnYearGrowthProps {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+function YearComparisonTable({
+  prevLabel,
+  currLabel,
+  previousValue,
+  currentValue,
+  variance,
+  growth,
+  pctPrev,
+  pctCurr,
+  theme,
+}: {
+  prevLabel: string;
+  currLabel: string;
+  previousValue: number;
+  currentValue: number;
+  variance: number;
+  growth: number;
+  pctPrev: number;
+  pctCurr: number;
+  theme: Theme;
+}) {
+  const t = TK[theme];
+
+  const rows = [
+    {
+      metric: 'Total Penjualan',
+      previous: fmt2(previousValue),
+      current: fmt2(currentValue),
+      variance: `${variance >= 0 ? '+' : ''}${fmt2(variance)}`,
+      growth,
+    },
+    {
+      metric: 'Kontribusi',
+      previous: `${pctPrev.toFixed(2)}%`,
+      current: `${pctCurr.toFixed(2)}%`,
+      variance: '—',
+      growth: null,
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        overflowX: 'auto',
+        border: `1px solid ${t.border}`,
+        borderRadius: 8,
+      }}
+    >
+      <table
+        style={{
+          width: '100%',
+          minWidth: 600,
+          borderCollapse: 'collapse',
+        }}
+      >
+        <thead>
+          <tr>
+            {[
+              'Metrik',
+              prevLabel,
+              currLabel,
+              'Varians',
+              'Growth %',
+            ].map((header, i) => (
+              <th
+                key={header}
+                style={{
+                  padding: '10px 14px',
+                  textAlign: i === 0 ? 'left' : 'right',
+                  fontSize: 9,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  fontWeight: 700,
+                  color: t.tableHeadText,
+                  background: t.tableHeadBg,
+                  borderBottom: `1px solid ${t.border}`,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>
+          {rows.map((row, index) => (
+            <tr
+              key={row.metric}
+              style={{
+                background: index % 2 === 0 ? t.rowAlt : 'transparent',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = t.rowHover;
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background =
+                  index % 2 === 0 ? t.rowAlt : 'transparent';
+              }}
+            >
+              <td
+                style={{
+                  padding: '11px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: t.text,
+                  fontFamily: 'IBM Plex Sans, sans-serif',
+                  borderBottom: `1px solid ${t.border}`,
+                }}
+              >
+                {row.metric}
+              </td>
+
+              <td
+                style={{
+                  padding: '11px 14px',
+                  textAlign: 'right',
+                  fontSize: 12,
+                  color: t.textSub,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  borderBottom: `1px solid ${t.border}`,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {row.previous}
+              </td>
+
+              <td
+                style={{
+                  padding: '11px 14px',
+                  textAlign: 'right',
+                  fontSize: 12,
+                  color: t.text,
+                  fontWeight: 700,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  borderBottom: `1px solid ${t.border}`,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {row.current}
+              </td>
+
+              <td
+                style={{
+                  padding: '11px 14px',
+                  textAlign: 'right',
+                  fontSize: 12,
+                  color:
+                    variance >= 0 ? t.posText : t.negText,
+                  fontWeight: 700,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  borderBottom: `1px solid ${t.border}`,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {row.variance}
+              </td>
+
+              <td
+                style={{
+                  padding: '11px 14px',
+                  textAlign: 'right',
+                  borderBottom: `1px solid ${t.border}`,
+                }}
+              >
+                {row.growth !== null ? (
+                  <GrowthBadge
+                    value={row.growth}
+                    theme={theme}
+                    size="sm"
+                  />
+                ) : (
+                  <span
+                    style={{
+                      color: t.textFaint,
+                      fontFamily: 'IBM Plex Mono, monospace',
+                    }}
+                  >
+                    —
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DistributionTable({
+  prevLabel,
+  currLabel,
+  previousValue,
+  currentValue,
+  pctPrev,
+  pctCurr,
+  theme,
+}: {
+  prevLabel: string;
+  currLabel: string;
+  previousValue: number;
+  currentValue: number;
+  pctPrev: number;
+  pctCurr: number;
+  theme: Theme;
+}) {
+  const t = TK[theme];
+
+  const rows = [
+    {
+      year: prevLabel,
+      value: previousValue,
+      pct: pctPrev,
+      color: COLOR_PREV,
+    },
+    {
+      year: currLabel,
+      value: currentValue,
+      pct: pctCurr,
+      color: COLOR_CURR,
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        overflowX: 'auto',
+        border: `1px solid ${t.border}`,
+        borderRadius: 8,
+      }}
+    >
+      <table
+        style={{
+          width: '100%',
+          minWidth: 480,
+          borderCollapse: 'collapse',
+        }}
+      >
+        <thead>
+          <tr>
+            {['Tahun', 'Penjualan', 'Kontribusi'].map(
+              (header, i) => (
+                <th
+                  key={header}
+                  style={{
+                    padding: '10px 14px',
+                    textAlign: i === 0 ? 'left' : 'right',
+                    fontSize: 9,
+                    fontFamily: 'IBM Plex Mono, monospace',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    fontWeight: 700,
+                    color: t.tableHeadText,
+                    background: t.tableHeadBg,
+                    borderBottom: `1px solid ${t.border}`,
+                  }}
+                >
+                  {header}
+                </th>
+              ),
+            )}
+          </tr>
+        </thead>
+
+        <tbody>
+          {rows.map((row, index) => (
+            <tr
+              key={row.year}
+              style={{
+                background:
+                  index % 2 === 0 ? t.rowAlt : 'transparent',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = t.rowHover;
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background =
+                  index % 2 === 0
+                    ? t.rowAlt
+                    : 'transparent';
+              }}
+            >
+              <td
+                style={{
+                  padding: '12px 14px',
+                  color: t.text,
+                  fontWeight: 600,
+                  fontSize: 12,
+                  fontFamily: 'IBM Plex Sans, sans-serif',
+                  borderBottom: `1px solid ${t.border}`,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: row.color,
+                    }}
+                  />
+                  {row.year}
+                </div>
+              </td>
+
+              <td
+                style={{
+                  padding: '12px 14px',
+                  textAlign: 'right',
+                  color: t.text,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  borderBottom: `1px solid ${t.border}`,
+                }}
+              >
+                {fmt2(row.value)}
+              </td>
+
+              <td
+                style={{
+                  padding: '12px 14px',
+                  textAlign: 'right',
+                  color: t.textSub,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  borderBottom: `1px solid ${t.border}`,
+                }}
+              >
+                {row.pct.toFixed(2)}%
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function YearOnYearGrowthComponent({ data, comparisonYears, theme: themeProp }: YearOnYearGrowthProps) {
   const theme: Theme = themeProp ?? 'light';
   const t = TK[theme];
   const { isMobile } = useBreakpoint();
 
-  const [expanded,   setExpanded]   = useState<'bar' | 'pie' | null>(null);
-  const [detailOpen, setDetailOpen] = useState(true);
+  const [expanded, setExpanded] = useState<'bar' | 'pie' | null>(null);
+
+  const [tableView, setTableView] = useState({
+    bar: false,
+    pie: false,
+  });
+
+const [detailOpen, setDetailOpen] = useState(true);
 
   const prevLabel = comparisonYears?.previousYear ?? 'Tahun Sebelumnya';
   const currLabel = comparisonYears?.currentYear  ?? 'Tahun Sekarang';
@@ -452,63 +845,295 @@ export default function YearOnYearGrowthComponent({ data, comparisonYears, theme
 
         {/* Bar chart */}
         <div style={card({ padding: '16px 16px 14px' })}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 12,
+              gap: 8,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+              }}
+            >
               <BarChart2 size={13} color={t.textMuted} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Sans, sans-serif' }}>
+
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: t.text,
+                  fontFamily: 'IBM Plex Sans, sans-serif',
+                }}
+              >
                 Perbandingan Tahunan
               </span>
             </div>
-            <ExpandBtn onClick={() => setExpanded('bar')} theme={theme} />
+
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                flexShrink: 0,
+              }}
+            >
+              <TableBtn
+                theme={theme}
+                active={tableView.bar}
+                onClick={() =>
+                  setTableView(prev => ({
+                    ...prev,
+                    bar: !prev.bar,
+                  }))
+                }
+              />
+
+              <ExpandBtn
+                onClick={() => setExpanded('bar')}
+                theme={theme}
+              />
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-            {[{ color: COLOR_PREV, label: String(prevLabel) }, { color: COLOR_CURR, label: String(currLabel) }].map((item, i) => (
-              <span key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                fontSize: 11, color: t.textSub, fontFamily: 'IBM Plex Mono, monospace',
-                padding: '3px 8px', borderRadius: 6,
-                background: t.inputBg, border: `1px solid ${t.border}`,
-              }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
-                {item.label}
-              </span>
-            ))}
-          </div>
-          <div style={{ background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '10px 4px 4px' }}>
-            {barChart(240)}
+          {!tableView.bar && (
+            <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+              {[
+                {
+                  color: COLOR_PREV,
+                  label: String(prevLabel),
+                },
+                {
+                  color: COLOR_CURR,
+                  label: String(currLabel),
+                },
+              ].map((item, i) => (
+                <span
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    fontSize: 11,
+                    color: t.textSub,
+                    fontFamily: 'IBM Plex Mono, monospace',
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    background: t.inputBg,
+                    border: `1px solid ${t.border}`,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: item.color,
+                      flexShrink: 0,
+                    }}
+                  />
+
+                  {item.label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div
+            style={{
+              background: t.inputBg,
+              border: `1px solid ${t.border}`,
+              borderRadius: 8,
+              padding: '10px 4px 4px',
+            }}
+          >
+            {tableView.bar ? (
+              <YearComparisonTable
+                prevLabel={String(prevLabel)}
+                currLabel={String(currLabel)}
+                previousValue={data.previousYearTotal}
+                currentValue={data.currentYearTotal}
+                variance={data.variance}
+                growth={data.variancePercentage}
+                pctPrev={pctPrev}
+                pctCurr={pctCurr}
+                theme={theme}
+              />
+            ) : (
+              barChart(240)
+            )}
           </div>
         </div>
 
         {/* Donut chart */}
         <div style={card({ padding: '16px 16px 14px' })}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <PieIcon size={13} color={t.textMuted} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Sans, sans-serif' }}>
-                Distribusi Penjualan
-              </span>
-            </div>
-            <ExpandBtn onClick={() => setExpanded('pie')} theme={theme} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-            {[
-              { label: String(prevLabel), pct: pctPrev, color: COLOR_PREV },
-              { label: String(currLabel), pct: pctCurr, color: COLOR_CURR },
-            ].map((item, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', width: 80, flexShrink: 0 }}>{item.label}</span>
-                <div style={{ flex: 1, height: 5, background: t.trackBg, borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${item.pct}%`, background: item.color, borderRadius: 3, transition: 'width 0.6s ease' }} />
-                </div>
-                <span style={{ fontSize: 10, fontWeight: 700, color: t.textSub, fontFamily: 'IBM Plex Mono, monospace', width: 44, textAlign: 'right', flexShrink: 0 }}>
-                  {item.pct.toFixed(2)}%
+          <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 12,
+                gap: 8,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 7,
+                }}
+              >
+                <PieIcon size={13} color={t.textMuted} />
+
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: t.text,
+                    fontFamily: 'IBM Plex Sans, sans-serif',
+                  }}
+                >
+                  Distribusi Penjualan
                 </span>
               </div>
-            ))}
-          </div>
-          <div style={{ background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '6px 4px 4px' }}>
-            {pieChart(220)}
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  flexShrink: 0,
+                }}
+              >
+                <TableBtn
+                  theme={theme}
+                  active={tableView.pie}
+                  onClick={() =>
+                    setTableView(prev => ({
+                      ...prev,
+                      pie: !prev.pie,
+                    }))
+                  }
+                />
+
+                <ExpandBtn
+                  onClick={() => setExpanded('pie')}
+                  theme={theme}
+                />
+              </div>
+            </div>
+          {!tableView.pie && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                marginBottom: 10,
+              }}
+            >
+              {[
+                {
+                  label: String(prevLabel),
+                  pct: pctPrev,
+                  color: COLOR_PREV,
+                },
+                {
+                  label: String(currLabel),
+                  pct: pctCurr,
+                  color: COLOR_CURR,
+                },
+              ].map((item, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: item.color,
+                      flexShrink: 0,
+                    }}
+                  />
+
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: t.textMuted,
+                      fontFamily: 'IBM Plex Mono, monospace',
+                      width: 80,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {item.label}
+                  </span>
+
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 5,
+                      background: t.trackBg,
+                      borderRadius: 3,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${item.pct}%`,
+                        background: item.color,
+                        borderRadius: 3,
+                        transition: 'width 0.6s ease',
+                      }}
+                    />
+                  </div>
+
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: t.textSub,
+                      fontFamily: 'IBM Plex Mono, monospace',
+                      width: 44,
+                      textAlign: 'right',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {item.pct.toFixed(2)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div
+            style={{
+              background: t.inputBg,
+              border: `1px solid ${t.border}`,
+              borderRadius: 8,
+              padding: '6px 4px 4px',
+            }}
+          >
+            {tableView.pie ? (
+              <DistributionTable
+                prevLabel={String(prevLabel)}
+                currLabel={String(currLabel)}
+                previousValue={data.previousYearTotal}
+                currentValue={data.currentYearTotal}
+                pctPrev={pctPrev}
+                pctCurr={pctCurr}
+                theme={theme}
+              />
+            ) : (
+              pieChart(220)
+            )}
           </div>
         </div>
       </div>

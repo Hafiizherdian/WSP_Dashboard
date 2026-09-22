@@ -52,8 +52,8 @@ const TK = {
     tooltipBorder: 'rgba(255,255,255,0.12)',
     card1Bg:       '#0f1724', card1Border: '#1e3a5f', card1Text: '#93c5fd',
     card2Bg:       '#1a1208', card2Border: '#3d2b0a', card2Text: '#fcd34d',
-    tableHeadBg:   '#0c0e14',
-    tableHeadText: 'rgba(255,255,255,0.35)',
+    tableHeadBg:   '#fef08a',
+    tableHeadText: 'rgb(0, 0, 0)',
     rowHover:      'rgba(255,255,255,0.03)',
     rowAlt:        'rgba(255,255,255,0.015)',
     pillPosBg:     'rgba(16,185,129,0.14)', pillPosText: '#10b981',
@@ -89,8 +89,8 @@ const TK = {
     tooltipBorder: 'rgba(0,0,0,0.1)',
     card1Bg:       '#eff6ff', card1Border: '#bfdbfe', card1Text: '#1d4ed8',
     card2Bg:       '#fefce8', card2Border: '#fef08a', card2Text: '#a16207',
-    tableHeadBg:   '#f8fafc',
-    tableHeadText: '#94a3b8',
+    tableHeadBg:   '#fef08a',
+    tableHeadText: 'rgb(0, 0, 0)',
     rowHover:      'rgba(0,0,0,0.03)',
     rowAlt:        'rgba(0,0,0,0.018)',
     pillPosBg:     'rgba(16,185,129,0.14)', pillPosText: '#15803d',
@@ -145,6 +145,55 @@ function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
     >
       <Maximize2 size={12} />
       Perbesar
+    </button>
+  );
+}
+
+function TableBtn({
+  onClick,
+  theme,
+  active = false,
+}: {
+  onClick: () => void;
+  theme: Theme;
+  active?: boolean;
+}) {
+  const t = TK[theme];
+
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '4px 10px',
+        borderRadius: 6,
+        background: active
+          ? theme === 'dark'
+            ? 'rgba(59,130,246,0.18)'
+            : 'rgba(37,99,235,0.10)'
+          : t.btnBg,
+        border: `1px solid ${
+          active
+            ? theme === 'dark'
+              ? 'rgba(96,165,250,0.5)'
+              : 'rgba(37,99,235,0.35)'
+            : t.btnBorder
+        }`,
+        color: active
+          ? theme === 'dark'
+            ? '#60a5fa'
+            : '#2563eb'
+          : t.btnText,
+        cursor: 'pointer',
+        fontSize: 11,
+        fontWeight: 600,
+        fontFamily: 'IBM Plex Mono, monospace',
+        flexShrink: 0,
+      }}
+    >
+      {active ? 'Chart' : 'Tabel'}
     </button>
   );
 }
@@ -327,6 +376,311 @@ function FilterSelect({
   );
 }
 
+function ComparisonTable({
+  data,
+  theme,
+  isMobile,
+  fmtUnit,
+}: {
+  data: { period: string; value: number; type: string }[];
+  theme: Theme;
+  isMobile: boolean;
+  fmtUnit: (v: number) => string;
+}) {
+  const t = TK[theme];
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${t.border}`,
+        borderRadius: isMobile ? 8 : 10,
+        overflow: 'hidden',
+        background: t.cardBg,
+      }}
+    >
+      <div style={{ overflowX: 'auto' }}>
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            minWidth: isMobile ? 280 : 500,
+          }}
+        >
+          <thead>
+            <tr>
+              <th
+                style={{
+                  padding: isMobile ? '9px 10px' : '10px 14px',
+                  textAlign: 'left',
+                  fontSize: 9,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  fontWeight: 700,
+                  color: t.tableHeadText,
+                  background: t.tableHeadBg,
+                  borderBottom: `1px solid ${t.border}`,
+                }}
+              >
+                Periode
+              </th>
+
+              <th
+                style={{
+                  padding: isMobile ? '9px 10px' : '10px 14px',
+                  textAlign: 'right',
+                  fontSize: 9,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  fontWeight: 700,
+                  color: t.tableHeadText,
+                  background: t.tableHeadBg,
+                  borderBottom: `1px solid ${t.border}`,
+                }}
+              >
+                Penjualan
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {data.map((row, index) => (
+              <tr
+                key={`${row.period}-${row.type}`}
+                style={{
+                  background:
+                    index % 2 !== 0 ? t.rowAlt : 'transparent',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = t.rowHover;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background =
+                    index % 2 !== 0 ? t.rowAlt : 'transparent';
+                }}
+              >
+                <td
+                  style={{
+                    padding: isMobile ? '9px 10px' : '11px 14px',
+                    fontSize: isMobile ? 11 : 12,
+                    fontFamily: 'IBM Plex Sans, sans-serif',
+                    color: t.text,
+                    borderBottom: `1px solid ${t.border}`,
+                    fontWeight: 600,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 3,
+                        background:
+                          row.type === 'c1w'
+                            ? t.barC1W
+                            : t.barL4W,
+                        flexShrink: 0,
+                      }}
+                    />
+
+                    {row.period}
+                  </div>
+                </td>
+
+                <td
+                  style={{
+                    padding: isMobile ? '9px 10px' : '11px 14px',
+                    textAlign: 'right',
+                    fontSize: isMobile ? 11 : 12,
+                    fontFamily: 'IBM Plex Mono, monospace',
+                    color: t.text,
+                    fontWeight: 700,
+                    borderBottom: `1px solid ${t.border}`,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {fmtUnit(row.value)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function TrendTable({
+  data,
+  theme,
+  isMobile,
+  fmtUnit,
+}: {
+  data: any[];
+  theme: Theme;
+  isMobile: boolean;
+  fmtUnit: (v: number) => string;
+}) {
+  const t = TK[theme];
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${t.border}`,
+        borderRadius: isMobile ? 8 : 10,
+        overflow: 'hidden',
+        background: t.cardBg,
+      }}
+    >
+      <div style={{ overflowX: 'auto' }}>
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            minWidth: isMobile ? 280 : 500,
+          }}
+        >
+          <thead>
+            <tr>
+              <th
+                style={{
+                  padding: isMobile ? '9px 10px' : '10px 14px',
+                  textAlign: 'left',
+                  fontSize: 9,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  fontWeight: 700,
+                  color: t.tableHeadText,
+                  background: t.tableHeadBg,
+                  borderBottom: `1px solid ${t.border}`,
+                }}
+              >
+                Minggu
+              </th>
+
+              <th
+                style={{
+                  padding: isMobile ? '9px 10px' : '10px 14px',
+                  textAlign: 'right',
+                  fontSize: 9,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  fontWeight: 700,
+                  color: t.tableHeadText,
+                  background: t.tableHeadBg,
+                  borderBottom: `1px solid ${t.border}`,
+                }}
+              >
+                Penjualan
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {data.map((row: any, index: number) => {
+              const isC1W = row.period === 'C1W';
+
+              return (
+                <tr
+                  key={`${row.week}-${index}`}
+                  style={{
+                    background:
+                      index % 2 !== 0 ? t.rowAlt : 'transparent',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = t.rowHover;
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background =
+                      index % 2 !== 0
+                        ? t.rowAlt
+                        : 'transparent';
+                  }}
+                >
+                  <td
+                    style={{
+                      padding: isMobile ? '9px 10px' : '11px 14px',
+                      fontSize: isMobile ? 11 : 12,
+                      fontFamily: 'IBM Plex Sans, sans-serif',
+                      color: t.text,
+                      borderBottom: `1px solid ${t.border}`,
+                      fontWeight: isC1W ? 700 : 500,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 7,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: isC1W
+                            ? t.barC1W
+                            : t.barL4W,
+                          flexShrink: 0,
+                        }}
+                      />
+
+                      {row.week}
+
+                      {isC1W && (
+                        <span
+                          style={{
+                            fontSize: 9,
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            background: t.pillPosBg,
+                            color: t.pillPosText,
+                            fontFamily:
+                              'IBM Plex Mono, monospace',
+                            fontWeight: 700,
+                          }}
+                        >
+                          C1W
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  <td
+                    style={{
+                      padding: isMobile ? '9px 10px' : '11px 14px',
+                      textAlign: 'right',
+                      fontSize: isMobile ? 11 : 12,
+                      fontFamily:
+                        'IBM Plex Mono, monospace',
+                      color: t.text,
+                      fontWeight: 700,
+                      borderBottom: `1px solid ${t.border}`,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {fmtUnit(row.value)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 interface L4WC4WAnalysisProps {
   data: L4WC4WData;
@@ -343,8 +697,20 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
   const t = TK[theme];
   const { isMobile } = useBreakpoint();
 
-  const [expanded,     setExpanded]     = useState<'bar' | 'line' | null>(null);
-  const [sort,         setSort]         = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'c1wValue', dir: 'desc' });
+  const [expanded, setExpanded] = useState<'bar' | 'line' | null>(null);
+
+  const [tableView, setTableView] = useState({
+    bar: false,
+    line: false,
+  });
+
+  const [sort, setSort] = useState<{
+    key: SortKey;
+    dir: 'asc' | 'desc'
+  }>({
+    key: 'c1wValue',
+    dir: 'desc',
+  });
   // const [selectedUnit, setSelectedUnit] = useState<UnitKey>('units_dos');
   const [internalSelectedUnit, setInternalSelectedUnit] = useState<UnitKey>('units_dos');
   const selectedUnit    = propSelectedUnit ?? internalSelectedUnit;
@@ -728,38 +1094,146 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
       }}>
         {/* Bar chart */}
         <div style={card({ padding: isMobile ? '14px 12px' : '18px 16px' })}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
-            <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Sans, sans-serif' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 10,
+              gap: 8,
+            }}
+          >
+            <span
+              style={{
+                fontSize: isMobile ? 12 : 13,
+                fontWeight: 700,
+                color: t.text,
+                fontFamily: 'IBM Plex Sans, sans-serif',
+              }}
+            >
               Perbandingan L4W vs C1W
             </span>
-            <ExpandBtn onClick={() => setExpanded('bar')} theme={theme} />
+
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                flexShrink: 0,
+              }}
+            >
+              <TableBtn
+                theme={theme}
+                active={tableView.bar}
+                onClick={() =>
+                  setTableView(prev => ({
+                    ...prev,
+                    bar: !prev.bar,
+                  }))
+                }
+              />
+
+              <ExpandBtn
+                onClick={() => setExpanded('bar')}
+                theme={theme}
+              />
+            </div>
           </div>
-          <BarLegend />
-          <div style={{
-            marginTop: isMobile ? 8 : 12,
-            background: t.inputBg, border: `1px solid ${t.border}`,
-            borderRadius: 8, padding: isMobile ? '8px 4px 4px' : '10px 6px 6px',
-          }}>
-            {barChart(inlineChartH)}
-          </div>
+          {!tableView.bar && <BarLegend />}
+
+            <div
+              style={{
+                marginTop: isMobile ? 8 : 12,
+                background: t.inputBg,
+                border: `1px solid ${t.border}`,
+                borderRadius: 8,
+                padding: isMobile
+                  ? '8px 4px 4px'
+                  : '10px 6px 6px',
+              }}
+            >
+              {tableView.bar ? (
+                <ComparisonTable
+                  data={chartData}
+                  theme={theme}
+                  isMobile={isMobile}
+                  fmtUnit={fmtUnit}
+                />
+              ) : (
+                barChart(inlineChartH)
+              )}
+            </div>
         </div>
 
         {/* Line chart */}
         {trendData.length > 0 && (
           <div style={card({ padding: isMobile ? '14px 12px' : '18px 16px' })}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
-              <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Sans, sans-serif' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 10,
+                gap: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: isMobile ? 12 : 13,
+                  fontWeight: 700,
+                  color: t.text,
+                  fontFamily: 'IBM Plex Sans, sans-serif',
+                }}
+              >
                 Tren 5 Minggu
               </span>
-              <ExpandBtn onClick={() => setExpanded('line')} theme={theme} />
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  flexShrink: 0,
+                }}
+              >
+                <TableBtn
+                  theme={theme}
+                  active={tableView.line}
+                  onClick={() =>
+                    setTableView(prev => ({
+                      ...prev,
+                      line: !prev.line,
+                    }))
+                  }
+                />
+
+                <ExpandBtn
+                  onClick={() => setExpanded('line')}
+                  theme={theme}
+                />
+              </div>
             </div>
-            <LineLegend />
-            <div style={{
-              marginTop: isMobile ? 8 : 12,
-              background: t.inputBg, border: `1px solid ${t.border}`,
-              borderRadius: 8, padding: isMobile ? '8px 4px 4px' : '10px 6px 6px',
-            }}>
-              {lineChart(inlineChartH)}
+            {!tableView.line && <LineLegend />}
+
+            <div
+              style={{
+                marginTop: isMobile ? 8 : 12,
+                background: t.inputBg,
+                border: `1px solid ${t.border}`,
+                borderRadius: 8,
+                padding: isMobile
+                  ? '8px 4px 4px'
+                  : '10px 6px 6px',
+              }}
+            >
+              {tableView.line ? (
+                <TrendTable
+                  data={trendData}
+                  theme={theme}
+                  isMobile={isMobile}
+                  fmtUnit={fmtUnit}
+                />
+              ) : (
+                lineChart(inlineChartH)
+              )}
             </div>
           </div>
         )}

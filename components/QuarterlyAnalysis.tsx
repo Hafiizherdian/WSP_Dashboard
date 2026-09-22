@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { QuarterlyData } from '@/types/sales';
 import { formatQuantity, formatPercentage } from '@/lib/utils';
 import { getProductCategory } from '@/lib/productCategories';
-import { Maximize2, X } from 'lucide-react';
+import { Maximize2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -29,8 +29,8 @@ const TK = {
     cardBg:        '#111318',
     border:        'rgba(255,255,255,0.06)',
     borderCard:    'rgba(255,255,255,0.07)',
-    tableHeadBg:   '#0c0e14',
-    tableHeadText: 'rgba(255,255,255,0.3)',
+    tableHeadBg:   '#fef08a',
+    tableHeadText: 'rgb(0, 0, 0)',
     rowHover:      'rgba(255,255,255,0.03)',
     rowAlt:        'rgba(255,255,255,0.015)',
     text:          'rgba(255,255,255,0.9)',
@@ -60,8 +60,8 @@ const TK = {
     cardBg:        '#ffffff',
     border:        'rgba(0,0,0,0.07)',
     borderCard:    'rgba(0,0,0,0.08)',
-    tableHeadBg:   '#f8fafc',
-    tableHeadText: '#94a3b8',
+    tableHeadBg:   '#fef08a',
+    tableHeadText: 'rgb(0, 0, 0)',
     rowHover:      'rgba(0,0,0,0.03)',
     rowAlt:        'rgba(0,0,0,0.018)',
     text:          '#0f172a',
@@ -198,7 +198,7 @@ function ViewToggle({ value, onChange, theme }: { value: 'chart' | 'table'; onCh
     <div style={{ display: 'flex', border: `1px solid ${t.inputBorder}`, borderRadius: 7, overflow: 'hidden' }}>
       {(['chart', 'table'] as const).map(mode => (
         <button key={mode} onClick={() => onChange(mode)}
-          style={{ padding: '4px 10px', border: 'none', cursor: 'pointer', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', background: value === mode ? t.btnBg : t.inputBg, color: value === mode ? t.btnText : t.textMuted, fontWeight: value === mode ? 700 : 400, borderRight: mode === 'chart' ? `1px solid ${t.inputBorder}` : 'none' }}>
+          style={{ padding: '4px 10px', border: 'none', cursor: 'pointer', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', background: value === mode ? t.btnBg : t.inputBg, color: value === mode ? t.btnText : t.text, fontWeight: value === mode ? 700 : 400, borderRight: mode === 'chart' ? `1px solid ${t.inputBorder}` : t.text }}>
           {mode === 'chart' ? 'Grafik' : 'Tabel'}
         </button>
       ))}
@@ -233,6 +233,21 @@ function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   );
 }
 
+// ─── TableBtn ─────────────────────────────────────────────────────────────────
+// Sama seperti di WeekComparisonComponent: toggle Chart <-> Tabel di kartu overview.
+function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
+  const t = TK[theme];
+  return (
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: active ? `${t.btnText}22` : t.btnBg, border: `1px solid ${active ? t.btnText : t.btnBorder}`, color: t.btnText, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0, transition: 'all 0.15s' }}>
+      {active
+        ? <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><polyline points="1,12 5,7 8,9 11,4 15,2" /></svg>
+        : <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="1" y="1" width="14" height="14" rx="2" /><line x1="1" y1="5.5" x2="15" y2="5.5" /><line x1="1" y1="10.5" x2="15" y2="10.5" /><line x1="5.5" y1="5.5" x2="5.5" y2="15" /></svg>
+      }
+      {active ? 'Chart' : 'Tabel'}
+    </button>
+  );
+}
+
 // ─── ChartTooltip ─────────────────────────────────────────────────────────────
 function ChartTooltip({ active, payload, label, labelPrefix, theme, unit }: any) {
   const t = TK[theme as Theme];
@@ -243,7 +258,7 @@ function ChartTooltip({ active, payload, label, labelPrefix, theme, unit }: any)
   const short   = !isOmzet && unit ? getUnitShortLabel(unit) : '';
   return (
     <div style={{ background: t.tooltipBg, border: `1px solid ${t.tooltipBorder}`, borderRadius: 8, padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }}>
-      <div style={{ fontSize: 11, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', marginBottom: 7 }}>{labelPrefix ?? ''}{label}</div>
+      <div style={{ fontSize: 11, color: t.text, fontFamily: 'IBM Plex Mono, monospace', marginBottom: 7 }}>{labelPrefix ?? ''}{label}</div>
       {visible.map((p: any, i: number) => {
         const isPct     = p.name === 'Achievement %';
         const formatted = isPct
@@ -254,7 +269,7 @@ function ChartTooltip({ active, payload, label, labelPrefix, theme, unit }: any)
         return (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: i < visible.length - 1 ? 4 : 0 }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: p.fill ?? p.color, flexShrink: 0 }} />
-            <span style={{ fontSize: 12, color: t.textSub, fontFamily: 'IBM Plex Sans, sans-serif' }}>
+            <span style={{ fontSize: 12, color: t.text, fontFamily: 'IBM Plex Sans, sans-serif' }}>
               {p.name}{!isPct && !isOmzet && short ? ` (${short})` : ''}:
             </span>
             <span style={{ fontSize: 12, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono, monospace' }}>{formatted}</span>
@@ -346,7 +361,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
         {[
-          { label: 'Total Minggu', value: filteredWeekly.length, color: t.textSub },
+          { label: 'Total Minggu', value: filteredWeekly.length, color: t.text },
           {
             label: isOmzet ? 'Total Omzet' : `Rata-rata Ach. (${weeksWithTarget.length}W)`,
             value: isOmzet
@@ -358,7 +373,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
           { label: 'Below Target', value: isOmzet ? '—' : belowTgt, color: t.negText },
         ].map((s, i) => (
           <div key={i} style={{ padding: '10px 14px', borderRadius: 10, background: t.qCardBg, border: `1px solid ${t.borderCard}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{s.label}</span>
+            <span style={{ fontSize: 10, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{s.label}</span>
             <span style={{ fontSize: 18, fontWeight: 800, color: s.color, fontFamily: 'IBM Plex Mono, monospace' }}>{s.value}</span>
           </div>
         ))}
@@ -366,7 +381,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
 
       <div style={card()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             Detail Mingguan · {getUnitLabel(selectedUnit)}
           </span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -420,7 +435,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
                       {isOmzet
                         ? <span style={{ color: t.textMuted }}>Target tidak tersedia untuk Omzet</span>
                         : best
-                          ? <><span style={{ color: t.posText }}>Best: W{best.week} ({best.achievement.toFixed(1)}%)</span>{worst && <span style={{ color: t.negText }}>Worst: W{worst.week} ({worst.achievement.toFixed(1)}%)</span>}</>
+                          ? <><span style={{ color: t.posText }}>Week Tertinggi: W{best.week} ({best.achievement.toFixed(1)}%)</span>{worst && <span style={{ color: t.negText }}>Week Terendah: W{worst.week} ({worst.achievement.toFixed(1)}%)</span>}</>
                           : <span style={{ color: t.textMuted }}>Belum ada target</span>
                       }
                     </div>
@@ -430,7 +445,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr>
-                            {['Week', ...(isOmzet ? ['Omzet'] : [`Target (${getUnitShortLabel(selectedUnit)})`, `Actual (${getUnitShortLabel(selectedUnit)})`, 'Variance', 'Var %', 'Achievement'])].map((h, i) => (
+                            {['Week', ...(isOmzet ? ['Omzet'] : [`Target (${getUnitShortLabel(selectedUnit)})`, `Actual (${getUnitShortLabel(selectedUnit)})`, 'Variance',  'Achievement'])].map((h, i) => (
                               <th key={h} style={{ padding: '8px 12px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.tableHeadText, background: t.tableHeadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
                             ))}
                           </tr>
@@ -450,10 +465,10 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
                                   </td>
                                 ) : (
                                   <>
-                                    <td style={{ ...tdBase, textAlign: 'right', fontSize: 11, color: ht ? t.textSub : t.textFaint }}>{ht ? formatUnitValue(ud.target, selectedUnit) : '—'}</td>
+                                    <td style={{ ...tdBase, textAlign: 'right', fontSize: 11, color: ht ? t.text : t.textFaint }}>{ht ? formatUnitValue(ud.target, selectedUnit) : '—'}</td>
                                     <td style={{ ...tdBase, textAlign: 'right', color: t.text, fontWeight: 700, fontSize: 11 }}>{ud.actual > 0 ? formatUnitValue(ud.actual, selectedUnit) : <span style={{ color: t.textFaint }}>—</span>}</td>
                                     <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(w.variance) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? `${w.variance >= 0 ? '+' : ''}${formatUnitValue(w.variance, selectedUnit)}` : '—'}</td>
-                                    <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(w.variancePercentage) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? formatPercentage(w.variancePercentage) : '—'}</td>
+                                    {/* <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(w.variancePercentage) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? formatPercentage(w.variancePercentage) : '—'}</td> */}
                                     <td style={{ ...tdBase, textAlign: 'right' }}><AchieveBadge pct={w.achievement} theme={theme} hasTarget={ht} /></td>
                                   </>
                                 )}
@@ -552,7 +567,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
         {[
-          { label: 'Total Bulan', value: filteredMonthly.length, color: t.textSub },
+          { label: 'Total Bulan', value: filteredMonthly.length, color: t.text },
           {
             label: isOmzet ? 'Total Omzet' : `Rata-rata Ach. (${monthsWithTarget.length}B)`,
             value: isOmzet
@@ -564,7 +579,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
           { label: 'Below Target', value: isOmzet ? '—' : monthsWithTarget.length - onTarget, color: t.negText },
         ].map((s, i) => (
           <div key={i} style={{ padding: '10px 14px', borderRadius: 10, background: t.qCardBg, border: `1px solid ${t.borderCard}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{s.label}</span>
+            <span style={{ fontSize: 10, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{s.label}</span>
             <span style={{ fontSize: 18, fontWeight: 800, color: s.color, fontFamily: 'IBM Plex Mono, monospace' }}>{s.value}</span>
           </div>
         ))}
@@ -572,7 +587,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
 
       {/* Achievement / Omzet heatmap */}
       <div style={card()}>
-        <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+        <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
           {isOmzet ? 'Omzet per Bulan' : `Achievement per Bulan · ${getUnitLabel(selectedUnit)}`}
         </span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
@@ -597,7 +612,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
                     <div style={{ height: '100%', width: `${pct}%`, background: hit ? '#10b981' : (ht ? '#ef4444' : t.textFaint), borderRadius: 2, transition: 'width 0.7s' }} />
                   </div>
                 )}
-                <div style={{ fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace' }}>
+                <div style={{ fontSize: 10, color: t.text, fontFamily: 'IBM Plex Mono, monospace' }}>
                   {m.actual > 0 ? `${formatUnitValue(m.actual, selectedUnit)}${!isOmzet ? ` ${getUnitShortLabel(selectedUnit)}` : ''}` : '—'}
                 </div>
               </div>
@@ -609,7 +624,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
       {/* Chart / Table */}
       <div style={card()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             {isOmzet ? 'Omzet Bulanan' : `Target vs Actual Bulanan · ${getUnitLabel(selectedUnit)}`}
           </span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -651,7 +666,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    {['Quarter', 'Month', ...(isOmzet ? ['Omzet'] : [`Target (${getUnitShortLabel(selectedUnit)})`, `Actual (${getUnitShortLabel(selectedUnit)})`, 'Variance', 'Var %', 'Achievement'])].map((h, i) => (
+                    {['Quarter', 'Month', ...(isOmzet ? ['Omzet'] : [`Target (${getUnitShortLabel(selectedUnit)})`, `Actual (${getUnitShortLabel(selectedUnit)})`, 'Variance',  'Achievement'])].map((h, i) => (
                       <th key={h} style={{ padding: '8px 12px', textAlign: i <= 1 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.tableHeadText, background: t.tableHeadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -672,10 +687,10 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
                           <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700, color: t.text, fontSize: 11 }}>{ud.actual > 0 ? formatUnitValue(ud.actual, 'omzet') : <span style={{ color: t.textFaint }}>—</span>}</td>
                         ) : (
                           <>
-                            <td style={{ ...tdBase, textAlign: 'right', fontSize: 11, color: ht ? t.textSub : t.textFaint }}>{ht ? formatUnitValue(ud.target, selectedUnit) : '—'}</td>
+                            <td style={{ ...tdBase, textAlign: 'right', fontSize: 11, color: ht ? t.text : t.textFaint }}>{ht ? formatUnitValue(ud.target, selectedUnit) : '—'}</td>
                             <td style={{ ...tdBase, textAlign: 'right', color: t.text, fontWeight: 700, fontSize: 11 }}>{ud.actual > 0 ? formatUnitValue(ud.actual, selectedUnit) : <span style={{ color: t.textFaint }}>—</span>}</td>
                             <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(m.variance) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? `${m.variance >= 0 ? '+' : ''}${formatUnitValue(m.variance, selectedUnit)}` : '—'}</td>
-                            <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(m.variancePercentage) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? formatPercentage(m.variancePercentage) : '—'}</td>
+                            {/* <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(m.variancePercentage) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? formatPercentage(m.variancePercentage) : '—'}</td> */}
                             <td style={{ ...tdBase, textAlign: 'right' }}><AchieveBadge pct={m.achievement} theme={theme} hasTarget={ht} /></td>
                           </>
                         )}
@@ -687,6 +702,126 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── OverviewTableView ────────────────────────────────────────────────────────
+// Tabel sortable untuk chart Bar ("Target vs Actual") & Pie ("Distribusi") di
+// tab Overview. Dipakai baik inline di kartu (mode toggle) maupun di dalam modal
+// saat tombol Perbesar dipencet ketika lagi mode tabel.
+type OverviewSortKey = 'quarter' | 'target' | 'actual' | 'variance' | 'variancePercentage' | 'achievement' | 'percentOfTotal';
+
+function OverviewTableView({
+  type, data, selectedUnit, isOmzet, theme,
+}: {
+  type: 'bar' | 'pie';
+  data: QuarterlyData[];
+  selectedUnit: string;
+  isOmzet: boolean;
+  theme: Theme;
+}) {
+  const t = TK[theme];
+  const [sort, setSort] = useState<{ key: OverviewSortKey; dir: 'asc' | 'desc' }>({ key: 'quarter', dir: 'asc' });
+
+  const totalActual = useMemo(() => data.reduce((s, q) => s + (q.actual ?? 0), 0), [data]);
+
+  const rows = useMemo(() => data.map(q => {
+    const hasTarget  = !isOmzet && q.target > 0;
+    const achievement = hasTarget ? (q.actual / q.target) * 100 : 0;
+    return {
+      quarter: q.quarter,
+      target: q.target ?? 0,
+      actual: q.actual ?? 0,
+      variance: q.variance ?? 0,
+      variancePercentage: q.variancePercentage ?? 0,
+      achievement,
+      hasTarget,
+      percentOfTotal: totalActual > 0 ? (q.actual / totalActual) * 100 : 0,
+    };
+  }), [data, isOmzet, totalActual]);
+
+  const sorted = useMemo(() => [...rows].sort((a, b) => {
+    const av = a[sort.key as keyof typeof a];
+    const bv = b[sort.key as keyof typeof b];
+    const cmp = typeof av === 'string' ? (av as string).localeCompare(bv as string) : (av as number) - (bv as number);
+    return sort.dir === 'asc' ? cmp : -cmp;
+  }), [rows, sort]);
+
+  const handleSort = (key: OverviewSortKey) =>
+    setSort(p => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
+
+  const SortArrows = ({ colKey }: { colKey: OverviewSortKey }) => (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', marginLeft: 4 }}>
+      <ChevronUp width={11} height={11} color={sort.key === colKey && sort.dir === 'asc' ? '#3b82f6' : (theme === 'dark' ? 'rgba(148,163,184,0.4)' : '#cbd5e1')} />
+      <ChevronDown width={11} height={11} color={sort.key === colKey && sort.dir === 'desc' ? '#3b82f6' : (theme === 'dark' ? 'rgba(148,163,184,0.4)' : '#cbd5e1')} style={{ marginTop: -3 }} />
+    </span>
+  );
+
+  const cols: { key: OverviewSortKey; label: string }[] = type === 'bar'
+    ? (isOmzet
+        ? [{ key: 'quarter', label: 'Quarter' }, { key: 'actual', label: 'Omzet' }]
+        : [
+            { key: 'quarter', label: 'Quarter' },
+            { key: 'target', label: `Target (${getUnitShortLabel(selectedUnit)})` },
+            { key: 'actual', label: `Actual (${getUnitShortLabel(selectedUnit)})` },
+            { key: 'variance', label: 'Variance' },
+            { key: 'variancePercentage', label: 'Var %' },
+            { key: 'achievement', label: 'Achievement' },
+          ])
+    : [
+        { key: 'quarter', label: 'Quarter' },
+        { key: 'actual', label: isOmzet ? 'Omzet' : `Actual (${getUnitShortLabel(selectedUnit)})` },
+        { key: 'percentOfTotal', label: '% Total' },
+      ];
+
+  return (
+    <div style={{ border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {cols.map((c, i) => (
+                <th key={c.key} onClick={() => handleSort(c.key)}
+                  style={{ padding: '9px 14px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.tableHeadText, background: t.tableHeadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: i === 0 ? 'flex-start' : 'flex-end', gap: 2, width: '100%' }}>
+                    {c.label}<SortArrows colKey={c.key} />
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r, idx) => (
+              <tr key={r.quarter} style={{ background: idx % 2 !== 0 ? t.rowAlt : 'transparent' }}
+                onMouseEnter={e => (e.currentTarget.style.background = t.rowHover)}
+                onMouseLeave={e => (e.currentTarget.style.background = idx % 2 !== 0 ? t.rowAlt : 'transparent')}>
+                <td style={{ padding: '10px 14px', fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', color: QUARTER_COLORS[r.quarter] ?? t.text, fontWeight: 700, borderBottom: `1px solid ${t.border}` }}>{r.quarter}</td>
+                {type === 'bar' ? (
+                  isOmzet ? (
+                    <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', color: t.text, fontWeight: 700, borderBottom: `1px solid ${t.border}` }}>
+                      {r.actual > 0 ? formatUnitValue(r.actual, 'omzet') : '—'}
+                    </td>
+                  ) : (
+                    <>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', color: r.hasTarget ? t.text : t.textFaint, borderBottom: `1px solid ${t.border}` }}>{r.hasTarget ? formatUnitValue(r.target, selectedUnit) : '—'}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', color: t.text, fontWeight: 700, borderBottom: `1px solid ${t.border}` }}>{r.actual > 0 ? formatUnitValue(r.actual, selectedUnit) : '—'}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 700, color: r.hasTarget ? varColor(r.variance) : t.textFaint, borderBottom: `1px solid ${t.border}` }}>{r.hasTarget ? `${r.variance >= 0 ? '+' : ''}${formatUnitValue(r.variance, selectedUnit)}` : '—'}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 700, color: r.hasTarget ? varColor(r.variancePercentage) : t.textFaint, borderBottom: `1px solid ${t.border}` }}>{r.hasTarget ? formatPercentage(r.variancePercentage) : '—'}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', borderBottom: `1px solid ${t.border}` }}><AchieveBadge pct={r.achievement} theme={theme} hasTarget={r.hasTarget} /></td>
+                    </>
+                  )
+                ) : (
+                  <>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', color: t.text, fontWeight: 700, borderBottom: `1px solid ${t.border}` }}>{r.actual > 0 ? formatUnitValue(r.actual, isOmzet ? 'omzet' : selectedUnit) : '—'}</td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', color: t.textSub, fontWeight: 600, borderBottom: `1px solid ${t.border}` }}>{r.percentOfTotal.toFixed(1)}%</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -715,6 +850,8 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
   const [viewMode, setViewMode]                 = useState<'overview' | 'weekly' | 'monthly'>('overview');
   const [modalContent, setModalContent]         = useState<React.ReactNode>(null);
   const [modalTitle, setModalTitle]             = useState('');
+  // Toggle Chart <-> Tabel untuk dua kartu di tab Overview (bar & pie)
+  const [overviewTableView, setOverviewTableView] = useState({  bar: false,  pie: false,});
 
   const openModal  = (content: React.ReactNode, title: string) => { setModalContent(content); setModalTitle(title); };
   const closeModal = () => { setModalContent(null); setModalTitle(''); };
@@ -928,7 +1065,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
                 { value: 'monthly',  label: 'Detail Bulanan',  color: '#f59e0b' },
               ].map(mode => (
                 <button key={mode.value} onClick={() => setViewMode(mode.value as any)}
-                  style={{ padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 600, fontFamily: 'IBM Plex Mono, monospace', cursor: 'pointer', transition: 'all 0.15s', background: viewMode === mode.value ? `${mode.color}18` : t.inputBg, border: `1px solid ${viewMode === mode.value ? mode.color : t.inputBorder}`, color: viewMode === mode.value ? mode.color : t.textSub }}>
+                  style={{ padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 600, fontFamily: 'IBM Plex Mono, monospace', cursor: 'pointer', transition: 'all 0.15s', background: viewMode === mode.value ? `${mode.color}18` : t.inputBg, border: `1px solid ${viewMode === mode.value ? mode.color : t.text}`, color: viewMode === mode.value ? mode.color : t.text }}>
                   {mode.label}
                 </button>
               ))}
@@ -942,24 +1079,54 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
             <div style={card({ padding: '18px 16px' })}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{isOmzet ? 'Omzet per Kuartal' : `Target vs Actual · ${getUnitLabel(selectedUnit)}`}</span>
-                <ExpandBtn onClick={() => setExpandedChart('bar')} theme={theme} />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <TableBtn onClick={() =>setOverviewTableView(prev => ({...prev, bar: !prev.bar, }))} theme={theme} active={overviewTableView.bar} />
+                  <ExpandBtn
+                    onClick={() => overviewTableView.bar
+                      ? openModal(
+                          <OverviewTableView type="bar" data={filteredData} selectedUnit={selectedUnit} isOmzet={isOmzet} theme={theme} />,
+                          `${isOmzet ? 'Omzet per Kuartal' : 'Target vs Actual'} · ${getUnitLabel(selectedUnit)} — Tabel Data`,
+                        )
+                      : setExpandedChart('bar')}
+                    theme={theme}
+                  />
+                </div>
               </div>
-              <div style={{ background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '10px 6px 6px' }}>{renderBarChart(260)}</div>
+              {overviewTableView.bar ? (
+                <OverviewTableView type="bar" data={filteredData} selectedUnit={selectedUnit} isOmzet={isOmzet} theme={theme} />
+              ) : (
+                <div style={{ background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '10px 6px 6px' }}>{renderBarChart(260)}</div>
+              )}
             </div>
             <div style={card({ padding: '18px 16px' })}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Distribusi Penjualan · {getUnitLabel(selectedUnit)}</span>
-                <ExpandBtn onClick={() => setExpandedChart('pie')} theme={theme} />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <TableBtn onClick={() =>setOverviewTableView(prev => ({...prev,pie: !prev.pie,}))} theme={theme} active={overviewTableView.pie} />
+                  <ExpandBtn
+                    onClick={() => overviewTableView.pie
+                      ? openModal(
+                          <OverviewTableView type="pie" data={filteredData} selectedUnit={selectedUnit} isOmzet={isOmzet} theme={theme} />,
+                          `Distribusi Penjualan · ${getUnitLabel(selectedUnit)} — Tabel Data`,
+                        )
+                      : setExpandedChart('pie')}
+                    theme={theme}
+                  />
+                </div>
               </div>
-              <div style={{ background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '10px 6px 6px' }}>{renderPieChart(80, 276)}</div>
+              {overviewTableView.pie ? (
+                <OverviewTableView type="pie" data={filteredData} selectedUnit={selectedUnit} isOmzet={isOmzet} theme={theme} />
+              ) : (
+                <div style={{ background: t.inputBg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '10px 6px 6px' }}>{renderPieChart(80, 276)}</div>
+              )}
             </div>
           </div>
 
           {/* Quarter cards */}
           <div style={card()}>
-            <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
               Performa per Kuartal · {getUnitLabel(selectedUnit)}
             </span>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
@@ -985,14 +1152,14 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
                       { label: 'Variance %', value: hasQTarget ? formatPercentage(q.variancePercentage) : '—',                                                                color: hasQTarget ? varColor(q.variancePercentage) : t.textFaint, bold: true  },
                     ].map((row, i) => (
                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-                        <span style={{ fontSize: 12, color: t.textMuted }}>{row.label}</span>
+                        <span style={{ fontSize: 12, color: t.text }}>{row.label}</span>
                         <span style={{ fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', color: row.color, fontWeight: row.bold ? 700 : 400 }}>{row.value}</span>
                       </div>
                     ))}
                     {!isOmzet && (
                       <>
                         <div style={{ borderTop: `1px solid ${t.border}`, marginTop: 10, paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, color: t.textMuted }}>Achievement</span>
+                          <span style={{ fontSize: 12, color: t.text }}>Achievement</span>
                           <AchieveBadge pct={achievement} theme={theme} hasTarget={hasQTarget} />
                         </div>
                         <div style={{ marginTop: 10, height: 5, background: t.inputBg, borderRadius: 3, overflow: 'hidden' }}>
@@ -1011,7 +1178,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
 
           {/* Detail table */}
           <div style={card()}>
-            <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
               Detail per Kuartal · {getUnitLabel(selectedUnit)}
             </span>
             <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
@@ -1037,7 +1204,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
                             <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700, color: t.text }}>{q.actual > 0 ? formatUnitValue(q.actual, 'omzet') : '—'}</td>
                           ) : (
                             <>
-                              <td style={{ ...tdBase, textAlign: 'right', color: hasQTarget ? t.textSub : t.textFaint }}>{hasQTarget ? formatUnitValue(q.target, selectedUnit) : '—'}</td>
+                              <td style={{ ...tdBase, textAlign: 'right', color: hasQTarget ? t.text : t.textFaint }}>{hasQTarget ? formatUnitValue(q.target, selectedUnit) : '—'}</td>
                               <td style={{ ...tdBase, textAlign: 'right', color: t.text, fontWeight: 700 }}>{q.actual > 0 ? formatUnitValue(q.actual, selectedUnit) : '—'}</td>
                               <td style={{ ...tdBase, textAlign: 'right', color: hasQTarget ? varColor(q.variance) : t.textFaint, fontWeight: 700 }}>{hasQTarget ? `${q.variance >= 0 ? '+' : ''}${formatUnitValue(q.variance, selectedUnit)}` : '—'}</td>
                               <td style={{ ...tdBase, textAlign: 'right', color: hasQTarget ? varColor(q.variancePercentage) : t.textFaint, fontWeight: 700 }}>{hasQTarget ? formatPercentage(q.variancePercentage) : '—'}</td>
@@ -1058,7 +1225,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
       {viewMode === 'weekly'  && <WeeklyDetailView  data={filteredData} selectedUnit={selectedUnit} theme={theme} card={card} tdBase={tdBase} expandModal={openModal} />}
       {viewMode === 'monthly' && <MonthlyDetailView data={filteredData} selectedUnit={selectedUnit} theme={theme} card={card} tdBase={tdBase} expandModal={openModal} />}
 
-      {/* Overview modal */}
+      {/* Overview modal (chart) */}
       {expandedChart && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => setExpandedChart(null)}>
           <div onClick={e => e.stopPropagation()} style={{ background: t.modalBg, border: `1px solid ${t.borderCard}`, borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 1100, height: '92dvh', display: 'flex', flexDirection: 'column', boxShadow: '0 -8px 40px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
@@ -1080,7 +1247,7 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
         </div>
       )}
 
-      {/* Sub-view modal */}
+      {/* Sub-view modal (juga dipakai untuk tabel overview) */}
       {modalContent && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={closeModal}>
           <div onClick={e => e.stopPropagation()} style={{ background: t.modalBg, border: `1px solid ${t.borderCard}`, borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 1200, height: '94dvh', display: 'flex', flexDirection: 'column', boxShadow: '0 -8px 40px rgba(0,0,0,0.35)', overflow: 'hidden' }}>

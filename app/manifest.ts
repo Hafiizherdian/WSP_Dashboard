@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "CGKN Dashboard",
-    short_name: "CGKN",
+    name: "CGKN WSP Dashboard",
+    short_name: "CGKN WSP",
     description: "Sales Data Management",
     start_url: "/",
     display: "standalone",

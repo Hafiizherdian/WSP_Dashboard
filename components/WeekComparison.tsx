@@ -13,54 +13,14 @@ import {
 } from 'recharts';
 import { ChevronUpIcon, ChevronDownIcon, Maximize2, X } from 'lucide-react';
 
+// IMPORT dari dashboard-theme (Sesuaikan path-nya dengan struktur folder Anda)
+import { 
+  Theme, tk, PREV_COLOR, CURR_COLOR, POS_COLOR, NEG_COLOR, 
+  UNIT_OPTIONS, useBreakpoint 
+} from '@/lib/dashboard-theme'; 
+
 // Types
-type Theme   = 'dark' | 'light';
 type UnitKey = 'units_dos' | 'units_bal' | 'units_slop' | 'units_bks' | 'omzet';
-
-// Theme tokens
-const TK = {
-  dark: {
-    pageBg: '#080a0f', cardBg: '#111318', headerBg: '#0c0e14',
-    filterBg: 'rgba(255,255,255,0.025)', modalBg: '#0f1117',
-    infoBg: 'rgba(37,99,235,0.07)', border: 'rgba(255,255,255,0.06)',
-    borderLight: 'rgba(255,255,255,0.05)', infoBorder: 'rgba(59,130,246,0.3)',
-    text: 'rgba(255,255,255,0.9)', textSub: 'rgba(255,255,255,0.55)',
-    textMuted: 'rgba(255,255,255,0.3)', textFaint: 'rgba(255,255,255,0.18)',
-    infoText: 'rgba(147,197,253,0.85)', inputBg: 'rgba(255,255,255,0.03)',
-    inputBorder: 'rgba(255,255,255,0.08)', selectBg: '#0c0e14',
-    theadBg: '#fef08a', tfootBg: '#f1e71b', theadText: 'rgb(0, 0, 0)',
-    rowAlt: 'rgba(255,255,255,0.015)', rowHover: 'rgba(255,255,255,0.03)',
-    gridStroke: 'rgba(255,255,255,0.05)', tooltipBg: '#1a1e2e',
-    tooltipBorder: 'rgba(255,255,255,0.12)', btnBg: 'rgba(37,99,235,0.12)',
-    btnBorder: 'rgba(59,130,246,0.3)', btnText: '#93c5fd',
-    shadow: 'none', sortActive: '#3b82f6', sortInactive: 'rgba(148,163,184,0.4)',
-    summaryBg: 'rgba(255,255,255,0.02)', summaryBorder: 'rgba(255,255,255,0.06)',
-    dragHint: 'rgba(59,130,246,0.18)',
-  },
-  light: {
-    pageBg: '#f0f2f7', cardBg: '#ffffff', headerBg: '#ffffff',
-    filterBg: '#f8fafc', modalBg: '#ffffff', infoBg: 'rgba(37,99,235,0.08)',
-    border: 'rgba(0,0,0,0.07)', borderLight: 'rgba(0,0,0,0.05)',
-    infoBorder: 'rgba(37,99,235,0.25)', text: '#0f172a', textSub: '#475569',
-    textMuted: '#94a3b8', textFaint: '#cbd5e1', infoText: '#1d4ed8',
-    inputBg: 'rgba(0,0,0,0.03)', inputBorder: 'rgba(0,0,0,0.1)',
-    selectBg: '#ffffff', theadBg: '#fef08a', tfootBg: '#f1e71b', theadText: 'rgb(0, 0, 0)',
-    rowAlt: 'rgba(0,0,0,0.018)', rowHover: 'rgba(0,0,0,0.03)',
-    gridStroke: 'rgba(0,0,0,0.06)', tooltipBg: '#ffffff',
-    tooltipBorder: 'rgba(0,0,0,0.1)', btnBg: 'rgba(37,99,235,0.08)',
-    btnBorder: 'rgba(37,99,235,0.25)', btnText: '#1d4ed8',
-    shadow: '0 1px 8px rgba(0,0,0,0.07)', sortActive: '#2563eb',
-    sortInactive: '#cbd5e1', summaryBg: '#f8fafc', summaryBorder: 'rgba(0,0,0,0.07)',
-    dragHint: 'rgba(37,99,235,0.08)',
-  },
-} as const;
-
-// Chart palette
-// Duotone violet + teal — dua warna setara bobotnya, beda dari biru chrome UI.
-const PREV_COLOR = '#2563eb';
-const CURR_COLOR = '#10b981';
-const POS_COLOR  = '#10b981';
-const NEG_COLOR  = '#ef4444';
 
 // Helpers
 function resolveUnitValues(
@@ -70,9 +30,11 @@ function resolveUnitValues(
   const key   = unit as UnitKey;
   const field = detail[key] as { previous: number; current: number } | undefined;
   if (field && typeof field.previous === 'number') return { previous: field.previous, current: field.current };
+  
   // Omzet tidak boleh fallback ke Dos — satuannya beda total (Rupiah vs unit jual).
   // Kalau backend lama belum kirim field omzet, tampilkan 0 daripada salah label.
   if (key === 'omzet') return { previous: 0, current: 0 };
+  
   const dos = detail.units_dos as { previous: number; current: number } | undefined;
   if (dos && typeof dos.previous === 'number') return { previous: dos.previous, current: dos.current };
   return { previous: 0, current: 0 };
@@ -104,18 +66,6 @@ const formatWeekRange = (range?: { start: number; end: number } | null) => {
 };
 
 // Responsive hooks
-function useBreakpoint() {
-  const [width, setWidth] = useState<number>(
-    typeof window !== 'undefined' ? window.innerWidth : 1024,
-  );
-  useEffect(() => {
-    const h = () => setWidth(window.innerWidth);
-    window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
-  }, []);
-  return { isMobile: width < 640, isTablet: width >= 640 && width < 1024, width };
-}
-
 function useWindowSize() {
   const [size, setSize] = useState({
     w: typeof window !== 'undefined' ? window.innerWidth  : 1200,
@@ -325,7 +275,7 @@ function ChartViewport<T extends ChartEntry>({
   data: T[];
   children: (allData: T[], visibleCount: number, startIndex: number) => React.ReactNode;
 }) {
-  const t = TK[theme];
+  const t = tk[theme]; // <-- Menggunakan import tk
   const {
     visibleCount, startIndex, canPanLeft, canPanRight, isWindowed, windowPct,
     zoomIn, zoomOut, resetZoom, panLeft, panRight, panTo, ref, handlers,
@@ -526,10 +476,10 @@ type LinePayload = { dataKey?: string; value?: number, name?: string};
 
 function TooltipLine({ active, payload, label, theme, fmtValue = fmtK }: {
   active?: boolean; payload?: LinePayload[]; label?: string; theme: Theme;
-  fmtValue?: (v: number) => string; // ← baru: format-aware (K-suffix biasa, atau Rp saat Omzet)
+  fmtValue?: (v: number) => string; 
 }) {
   if (!active || !payload?.length) return null;
-  const t  = TK[theme];
+  const t  = tk[theme];
   const pv = payload.find(x => x.dataKey === 'previousYear')?.value ?? 0;
   const cv = payload.find(x => x.dataKey === 'currentYear')?.value  ?? 0;
   const vr = cv - pv;
@@ -554,7 +504,7 @@ function TooltipBar({ active, payload, label, theme }: {
   active?: boolean; payload?: { value?: number }[]; label?: string; theme: Theme;
 }) {
   if (!active || !payload?.length) return null;
-  const t = TK[theme];
+  const t = tk[theme];
   const v = payload[0]?.value ?? 0;
   return (
     <div style={{ background: t.tooltipBg, border: `1px solid ${t.tooltipBorder}`, borderRadius: 8, padding: '8px 12px', fontFamily: 'IBM Plex Mono,monospace', boxShadow: '0 4px 16px rgba(0,0,0,.12)' }}>
@@ -569,7 +519,7 @@ function ChartSummary({ cells, theme }: {
   cells: { label: string; value: string; color?: string }[];
   theme: Theme;
 }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <div style={{
       display: 'grid', gridTemplateColumns: `repeat(${cells.length}, 1fr)`,
@@ -587,7 +537,7 @@ function ChartSummary({ cells, theme }: {
 
 // Legend components
 function LegendPill({ color, label, dash, theme }: { color: string; label: string; dash?: boolean; theme: Theme }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontFamily: 'IBM Plex Mono,monospace', color: t.textSub }}>
       {dash
@@ -600,7 +550,7 @@ function LegendPill({ color, label, dash, theme }: { color: string; label: strin
 }
 
 function DotLegend({ color, label, theme }: { color: string; label: string; theme: Theme }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontFamily: 'IBM Plex Mono,monospace', color: t.textSub }}>
       <span style={{ width: 10, height: 10, borderRadius: 2, background: color, display: 'inline-block', flexShrink: 0 }} />
@@ -632,7 +582,7 @@ function SortIcon({ colKey, sortConfig, theme }: {
   sortConfig: { key: string; direction: 'asc' | 'desc' } | null;
   theme: Theme;
 }) {
-  const t = TK[theme]; const isActive = sortConfig?.key === colKey;
+  const t = tk[theme]; const isActive = sortConfig?.key === colKey;
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', marginLeft: 4 }}>
       <ChevronUpIcon   width={12} height={12} color={isActive && sortConfig?.direction === 'asc'  ? t.sortActive : t.sortInactive} />
@@ -647,7 +597,7 @@ function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, childre
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   children: React.ReactNode; theme: Theme; fullWidth?: boolean;
 }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', border: `1px solid ${t.inputBorder}`, borderRadius: 8, overflow: 'hidden', flex: fullWidth ? '1 1 auto' : undefined, minWidth: 0 }}>
       <span style={{ padding: '6px 10px', fontSize: 10, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, color: accentColor, background: `${accentColor}18`, borderRight: `1px solid ${t.inputBorder}`, display: 'flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>{label}</span>
@@ -660,17 +610,17 @@ function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, childre
 
 // Buttons
 function ExpandBtn({ onClick, theme, isTable }: { onClick: () => void; theme: Theme; isTable?: boolean }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: t.btnBg, border: `1px solid ${t.btnBorder}`, color: t.btnText, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace', flexShrink: 0 }}>
       <Maximize2 width={12} height={12} />
-      {isTable ? 'Perbesar Tabel' : 'Perbesar'}
+      {isTable ? 'Perbesar' : 'Perbesar'}
     </button>
   );
 }
 
 function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: active ? `${t.btnText}22` : t.btnBg, border: `1px solid ${active ? t.btnText : t.btnBorder}`, color: t.btnText, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace', flexShrink: 0, transition: 'all .15s' }}>
       {active
@@ -696,7 +646,7 @@ function ChartTableView({
   previousYearLabel: string | number; currentYearLabel: string | number;
   theme: Theme; maxHeight?: number; valueFormatter?: (v: number) => string;
 }) {
-  const t = TK[theme];
+  const t = tk[theme];
   const [sort, setSort] = useState<{ key: keyof ChartRowData; dir: 'asc' | 'desc' }>({ key: 'week', dir: 'asc' });
 
   const handleSort = useCallback((key: keyof ChartRowData) => {
@@ -713,11 +663,11 @@ function ChartTableView({
 
   const cols: { key: keyof ChartRowData; label: string; right: boolean }[] = type === 'line'
     ? [
-        { key: 'week',               label: 'Minggu',              right: false },
+        { key: 'week',               label: 'Minggu',             right: false },
         { key: 'previousYear',       label: String(previousYearLabel), right: true },
         { key: 'currentYear',        label: String(currentYearLabel),  right: true },
-        { key: 'variance',           label: 'Variance',            right: true },
-        { key: 'variancePercentage', label: 'Var %',               right: true },
+        { key: 'variance',           label: 'Variance',             right: true },
+        { key: 'variancePercentage', label: 'Var %',                right: true },
       ]
     : [
         { key: 'week',               label: 'Minggu',  right: false },
@@ -800,7 +750,7 @@ function ChartTableView({
 function ChartModal({ onClose, title, theme, children }: {
   onClose: () => void; title: string; theme: Theme; children: React.ReactNode;
 }) {
-  const t = TK[theme];
+  const t = tk[theme];
   useEffect(() => {
     const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', fn);
@@ -845,7 +795,7 @@ export default function WeekComparisonComponent({
   data, comparisonYears, comparisonWeeks, theme: themeProp,
 }: WeekComparisonProps) {
   const theme: Theme = themeProp ?? 'light';
-  const t = TK[theme];
+  const t = tk[theme]; // Menggunakan import tk
   const { isMobile, isTablet } = useBreakpoint();
   const winSize = useWindowSize();
 
@@ -877,17 +827,9 @@ export default function WeekComparisonComponent({
   const fmtVal       = isOmzetUnit ? fmtRp      : fmtK;
   const fmtValExact  = isOmzetUnit ? fmtRpExact : fmtExact;
 
-  const unitOptions = useMemo(() => [
-    { value: 'units_dos',  label: 'Jual (Dos Net)' },
-    { value: 'units_bal',  label: 'Jual (Bal Net)' },
-    { value: 'units_slop', label: 'Jual (Slop Net)' },
-    { value: 'units_bks',  label: 'Jual (Bks Net)' },
-    { value: 'omzet',      label: 'Omzet (Rp)' }, // ← baru
-  ], []);
-
   const getUnitLabel = useCallback(
-    (u: string) => unitOptions.find(o => o.value === u)?.label ?? u,
-    [unitOptions],
+    (u: string) => UNIT_OPTIONS.find(o => o.value === u)?.fullLabel ?? u,
+    []
   );
 
   const allProductsInData = useMemo((): ResolvedProductRow[] => {
@@ -897,7 +839,7 @@ export default function WeekComparisonComponent({
         if (!m.has(d.product)) m.set(d.product, {
           units_dos: { previous: 0, current: 0 }, units_bal: { previous: 0, current: 0 },
           units_slop: { previous: 0, current: 0 }, units_bks: { previous: 0, current: 0 },
-          omzet: { previous: 0, current: 0 }, // ← baru
+          omzet: { previous: 0, current: 0 },
         });
         const acc = m.get(d.product)!;
         (['units_dos', 'units_bal', 'units_slop', 'units_bks', 'omzet'] as UnitKey[]).forEach(k => {
@@ -1068,7 +1010,6 @@ export default function WeekComparisonComponent({
           cursor={{ stroke: t.textSub, strokeWidth: 1 }}
           contentStyle={tooltipContentStyle}
         />
-        {/* Tahun lalu — garis solid, dot ring kecil di tiap titik, tetap kecil saat hover */}
         <Line
           type="natural"
           dataKey="previousYear"
@@ -1079,7 +1020,6 @@ export default function WeekComparisonComponent({
           activeDot={{ r: isMobile ? 4 : 5, stroke: PREV_COLOR, strokeWidth: 2, fill: t.cardBg }}
           name={String(previousYearLabel)}
         />
-        {/* Tahun ini — metrik utama: dot ring kecil di tiap titik, jadi bola solid besar saat dihover */}
         <Line
           type="natural"
           dataKey="currentYear"
@@ -1160,7 +1100,7 @@ export default function WeekComparisonComponent({
       value: `${lineSummary.vari >= 0 ? '+' : ''}${fmtValExact(lineSummary.vari)} (${fmtPct(lineSummary.pct)})`,
       color: lineSummary.vari >= 0 ? POS_COLOR : NEG_COLOR,
     },
-  ], [lineSummary, fmtValExact]);
+  ], [lineSummary, fmtValExact, previousYearLabel, currentYearLabel]);
 
   const barCells = useMemo(() => [
     { label: 'Rata-rata',           value: fmtPct(barSummary.avg),  color: barSummary.avg  >= 0 ? POS_COLOR : NEG_COLOR },
@@ -1171,25 +1111,18 @@ export default function WeekComparisonComponent({
     return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 12 : 20, fontFamily: 'IBM Plex Sans,sans-serif' }}>
 
-      {/* Info banner */}
-      {/* <div style={{ padding: isMobile ? '8px 10px' : '10px 14px', background: t.infoBg, border: `1px solid ${t.infoBorder}`, borderRadius: isMobile ? 8 : 10 }}>
-        <p style={{ margin: 0, fontSize: isMobile ? 10 : 12, color: t.infoText, fontFamily: 'IBM Plex Mono,monospace', lineHeight: 1.6 }}>
-          {isMobile
-            ? <><strong>{String(previousYearLabel)}</strong> vs <strong>{String(currentYearLabel)}</strong><br />{previousWeekRangeLabel} — {data.length} minggu</>
-            : <><strong>Periode:</strong> {previousWeekRangeLabel} vs {currentWeekRangeLabel}&nbsp;|&nbsp;<strong>Tahun:</strong> {String(previousYearLabel)} vs {String(currentYearLabel)}&nbsp;|&nbsp;<strong>Total Minggu:</strong> {data.length}</>
-          }
-        </p>
-      </div> */}
-
       {/* Filter */}
       <div style={{ ...card(), padding: isMobile ? 14 : 20 }}>
         <span style={{ fontSize: isMobile ? 10 : 11, fontWeight: 700, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase', letterSpacing: '.08em', display: 'block', marginBottom: isMobile ? 8 : 10 }}>
           Filter Data
         </span>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, auto)', gap: 8, alignItems: 'center', justifyContent: isMobile ? 'stretch' : 'flex-start' }}>
+          
+          {/* MENGGUNAKAN UNIT_OPTIONS DARI TEMA */}
           <FilterSelect label="Unit" accentColor="#10b981" value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} theme={theme} fullWidth={isMobile}>
-            {unitOptions.map(o => <option key={o.value} value={o.value} style={{ background: t.selectBg }}>{o.label}</option>)}
+            {UNIT_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ background: t.selectBg }}>{o.fullLabel}</option>)}
           </FilterSelect>
+          
           <div style={{ gridColumn: isMobile ? '1 / -1' : undefined }}>
             <FilterSelect label="Minggu" accentColor="#3b82f6" value={selectedWeek ?? 'all'} onChange={e => setSelectedWeek(e.target.value === 'all' ? null : Number(e.target.value))} theme={theme} fullWidth={isMobile}>
               <option value="all" style={{ background: t.selectBg }}>Semua Minggu</option>

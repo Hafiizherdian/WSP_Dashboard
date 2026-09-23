@@ -74,7 +74,7 @@ const tk = {
 
 const CC = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#0d9488','#f97316','#ec4899'];
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Types
 interface AchRow {
   salesman?:       string;
   product?:        string;
@@ -169,7 +169,7 @@ interface DistData {
   achievementSalesmanProduct:  AchSalesmanProductRow[]; 
 }
 
-// ─── Props dari page.tsx ──────────────────────────────────────────────────────
+// Props dari page.tsx
 interface DistributionSectionProps {
   theme?:             Theme;
   areas?:             AreaConfig[];
@@ -185,7 +185,7 @@ interface DistributionSectionProps {
   onLoadingChange?:   (v: boolean) => void;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 const fmtN     = (v: number) => (v ?? 0).toLocaleString('id-ID', { maximumFractionDigits: 1 });
 const achColor = (p: number) => p >= 100 ? '#10b981' : p >= 80 ? '#f59e0b' : '#ef4444';
 
@@ -227,7 +227,7 @@ function normRows(rows: any[]): any[] {
 // versi granular per-salesman dari agregat tersebut di client. Kalau nanti
 // dibutuhkan, itu berarti query granular baru di server.
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// Sub-components
 function AchBadge({ pct, theme }: { pct: number; theme: Theme }) {
   const t = tk[theme];
   const n = parseFloat(String(pct ?? 0));
@@ -304,7 +304,7 @@ function FilterBadge({ label, value, onClear, theme }: { label: string; value: s
   );
 }
 
-// ─── Distribution Tabs ────────────────────────────────────────────────────────
+// Distribution Tabs
 function DistributionTabs({
   data,
   theme,
@@ -364,7 +364,7 @@ function DistributionTabs({
   );
 }
 
-// ─── Achievement per Salesman × Produk Content ────────────────────────────────
+// Achievement per Salesman × Produk Content
 function AchievementSalesmanProductContent({
   data,
   theme,
@@ -454,7 +454,7 @@ function AchievementSalesmanProductContent({
   );
 }
 
-// ─── Achievement Content ──────────────────────────────────────────────────────
+// Achievement Content
 function AchievementContent({
   data,
   theme,
@@ -521,10 +521,35 @@ function AchievementContent({
                   const headers =
                     view === 'salesman' ? ['#', 'Salesman', 'Plan', 'Av-Out', 'Achievement', 'Outlet'] :
                     view === 'product'  ? ['#', 'Produk', 'Kategori', 'Plan', 'Av-Out', 'Achievement'] :
-                                         ['#', 'Kota · Kecamatan', 'Plan', 'Av-Out', 'Achievement', 'Outlet'];
-                  return headers.map((h, i) => (
-                    <th key={i} style={{ padding: '8px 12px', textAlign: i > 1 ? 'right' : 'left', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: t.tableHeadText, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 20, background: t.tableHeadBg }}>{h}</th>
-                  ));
+                                          ['#', 'Kota', 'Kecamatan', 'Plan', 'Av-Out', 'Achievement', 'Outlet'];
+                                          
+                  return headers.map((h, i) => {
+                    // Jika view salesman, rata kanan mulai index 2. Jika product/area, mulai index 3.
+                    const isRightAligned = view === 'salesman' ? i > 1 : i > 2;
+                    
+                    return (
+                      <th 
+                        key={i} 
+                        style={{ 
+                          padding: '8px 12px', 
+                          textAlign: isRightAligned ? 'right' : 'left', 
+                          fontSize: 9, 
+                          fontWeight: 700, 
+                          textTransform: 'uppercase', 
+                          letterSpacing: '0.07em', 
+                          color: t.tableHeadText, 
+                          borderBottom: `1px solid ${t.border}`, 
+                          whiteSpace: 'nowrap', 
+                          position: 'sticky', 
+                          top: 0, 
+                          zIndex: 20, 
+                          background: t.tableHeadBg 
+                        }}
+                      >
+                        {h}
+                      </th>
+                    );
+                  });
                 })()}
               </tr>
             </thead>
@@ -537,12 +562,22 @@ function AchievementContent({
                   onMouseEnter={e => (e.currentTarget.style.background = t.rowHover)}
                   onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 1 ? t.rowAlt : 'transparent')}>
                   <td style={{ padding: '8px 12px', fontSize: 10, color: t.textMuted }}>{i + 1}</td>
+                  
+                  {/* Kolom utama (Salesman / Produk / Kota) */}
                   <td style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: t.text, whiteSpace: 'nowrap' }}>
-                    {view === 'salesman' ? r.salesman : view === 'product' ? r.product : `${r.city} · ${r.district}`}
+                    {view === 'salesman' ? r.salesman : view === 'product' ? r.product : r.city}
                   </td>
+                  
+                  {/* Kolom tambahan jika view == product */}
                   {view === 'product' && (
                     <td style={{ padding: '8px 12px', fontSize: 10, color: t.textSub }}>{r.category || '—'}</td>
                   )}
+                  
+                  {/* Kolom tambahan jika view == area (Kecamatan) */}
+                  {view === 'area' && (
+                    <td style={{ padding: '8px 12px', fontSize: 11, color: t.textSub, whiteSpace: 'nowrap' }}>{r.district || '—'}</td>
+                  )}
+
                   <td style={{ padding: '8px 12px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
                   <td style={{ padding: '8px 12px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
                   <td style={{ padding: '8px 12px', textAlign: 'right' }}><PBar pct={r.achievement_pct} theme={theme} /></td>
@@ -566,7 +601,7 @@ function AchievementContent({
   );
 }
 
-// ─── Trend Content ────────────────────────────────────────────────────────────
+// Trend Content
 function TrendContent({ data, theme }: { data: DistData; theme: Theme }) {
   const t     = tk[theme];
   const ts    = { fontSize: 8, fill: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' };
@@ -671,7 +706,7 @@ function TrendContent({ data, theme }: { data: DistData; theme: Theme }) {
   );
 }
 
-// ─── Coverage Content ─────────────────────────────────────────────────────────
+// Coverage Content
 function CoverageContent({
   data,
   theme,
@@ -848,7 +883,7 @@ function CoverageContent({
   );
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// Constants
 const EMPTY_DATA: DistData = {
   summary: {
     total_plan: 0, total_actual: 0, total_av_in: 0, total_ec: 0,
@@ -871,7 +906,7 @@ const WEEKS_ARR = Array.from({ length: 52 }, (_, i) => i + 1);
 const TAB_BAR_H = 42;
 const SUB_TAB_H = 38;
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// Main Component
 export default function DistributionSection({
   theme = 'dark',
   areas = [],
@@ -1211,7 +1246,7 @@ export default function DistributionSection({
             </>
           )}
 
-          {/* ── Indikator status: dot animasi saat loading, atau "Belum diterapkan" saat filter Produk/Tipe Outlet/Minggu berubah ── */}
+          {/* Indikator status: dot animasi saat loading, atau "Belum diterapkan" saat filter Produk/Tipe Outlet/Minggu berubah */}
           {loading ? (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>

@@ -373,7 +373,7 @@ function WeeklyYoYDetailView({ data, selectedUnit, theme, card, tdBase, expandMo
         <Tooltip content={<ChartTooltip labelPrefix="Minggu: " theme={theme} unit={selectedUnit} previousLabel={previousLabel} currentLabel={currentLabel} />} />
         <Bar yAxisId="left" dataKey="previous" fill={PREV_COLOR} name={previousLabel} radius={[3,3,0,0]} maxBarSize={22} opacity={0.75} />
         <Bar yAxisId="left" dataKey="current" fill={CURR_COLOR} name={currentLabel} radius={[3,3,0,0]} maxBarSize={22} />
-        <Line yAxisId="right" type="monotone" dataKey="growth" connectNulls={false} stroke="#f59e0b" strokeWidth={2} dot={false} name="Growth %" />
+        <Line yAxisId="right" type="monotone" dataKey="growth" connectNulls={false} stroke="#f87171" strokeWidth={2} dot={{ r: 4, fill: '#f87171', strokeWidth: 0 }} name="Growth %" />
         <ReferenceLine yAxisId="right" y={0} stroke={t.textMuted} strokeDasharray="4 4" strokeWidth={1.5} />
       </ComposedChart>
     </ResponsiveContainer>
@@ -420,8 +420,8 @@ function WeeklyYoYDetailView({ data, selectedUnit, theme, card, tdBase, expandMo
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: t.textSub, fontFamily: 'IBM Plex Sans, sans-serif' }}>
               <span style={{ width: 10, height: 10, borderRadius: 3, background: CURR_COLOR }} />{currentLabel}
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f59e0b', fontFamily: 'IBM Plex Sans, sans-serif' }}>
-              <span style={{ width: 18, height: 2, background: '#f59e0b', borderRadius: 2 }} />Growth %
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f87171', fontFamily: 'IBM Plex Sans, sans-serif' }}>
+              <span style={{ width: 18, height: 2, background: '#f87171', borderRadius: 2 }} />Growth %
             </span>
           </div>
         )}
@@ -550,7 +550,7 @@ function MonthlyYoYDetailView({ data, selectedUnit, theme, card, tdBase, expandM
         <Tooltip content={<ChartTooltip labelPrefix="Bulan: " theme={theme} unit={selectedUnit} previousLabel={previousLabel} currentLabel={currentLabel} />} />
         <Bar yAxisId="left" dataKey="previous" fill={PREV_COLOR} name={previousLabel} radius={[4,4,0,0]} maxBarSize={26} opacity={0.75} />
         <Bar yAxisId="left" dataKey="current" fill={CURR_COLOR} name={currentLabel} radius={[4,4,0,0]} maxBarSize={26} />
-        <Line yAxisId="right" type="monotone" dataKey="growth" connectNulls={false} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 0 }} name="Growth %" />
+        <Line yAxisId="right" type="monotone" dataKey="growth" connectNulls={false} stroke="#f87171" strokeWidth={2.5} dot={{ r: 4, fill: '#f87171', strokeWidth: 0 }} name="Growth %" />
         <ReferenceLine yAxisId="right" y={0} stroke={t.text} strokeDasharray="4 4" strokeWidth={1.5} />
       </ComposedChart>
     </ResponsiveContainer>
@@ -632,8 +632,8 @@ function MonthlyYoYDetailView({ data, selectedUnit, theme, card, tdBase, expandM
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: t.text, fontFamily: 'IBM Plex Sans, sans-serif' }}>
               <span style={{ width: 10, height: 10, borderRadius: 3, background: CURR_COLOR }} />{currentLabel}
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f59e0b', fontFamily: 'IBM Plex Sans, sans-serif' }}>
-              <span style={{ width: 18, height: 2, background: '#f59e0b', borderRadius: 2 }} />Growth %
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f87171', fontFamily: 'IBM Plex Sans, sans-serif' }}>
+              <span style={{ width: 18, height: 2, background: '#f87171', borderRadius: 2 }} />Growth %
             </span>
           </div>
         )}

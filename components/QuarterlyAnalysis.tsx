@@ -22,72 +22,10 @@ import {
   ReferenceLine,
 } from 'recharts';
 
-type Theme = 'dark' | 'light';
-
-const TK = {
-  dark: {
-    cardBg:        '#111318',
-    border:        'rgba(255,255,255,0.06)',
-    borderCard:    'rgba(255,255,255,0.07)',
-    tableHeadBg:   '#fef08a',
-    tableHeadText: 'rgb(0, 0, 0)',
-    rowHover:      'rgba(255,255,255,0.03)',
-    rowAlt:        'rgba(255,255,255,0.015)',
-    text:          'rgba(255,255,255,0.9)',
-    textSub:       'rgba(255,255,255,0.55)',
-    textMuted:     'rgba(255,255,255,0.3)',
-    textFaint:     'rgba(255,255,255,0.18)',
-    inputBg:       'rgba(255,255,255,0.03)',
-    inputBorder:   'rgba(255,255,255,0.08)',
-    selectBg:      '#0c0e14',
-    infoBg:        'rgba(16,185,129,0.07)',
-    infoBorder:    'rgba(16,185,129,0.25)',
-    infoText:      '#6ee7b7',
-    btnBg:         'rgba(37,99,235,0.12)',
-    btnBorder:     'rgba(59,130,246,0.3)',
-    btnText:       '#93c5fd',
-    modalBg:       '#0f1117',
-    gridStroke:    'rgba(255,255,255,0.06)',
-    axisColor:     'rgba(255,255,255,0.28)',
-    tooltipBg:     '#1a1e2c',
-    tooltipBorder: 'rgba(255,255,255,0.12)',
-    qCardBg:       '#0d0f16',
-    posBg:   'rgba(16,185,129,0.12)', posText: '#6ee7b7',
-    negBg:   'rgba(239,68,68,0.12)',  negText: '#fca5a5',
-    shadow:  'none',
-  },
-  light: {
-    cardBg:        '#ffffff',
-    border:        'rgba(0,0,0,0.07)',
-    borderCard:    'rgba(0,0,0,0.08)',
-    tableHeadBg:   '#fef08a',
-    tableHeadText: 'rgb(0, 0, 0)',
-    rowHover:      'rgba(0,0,0,0.03)',
-    rowAlt:        'rgba(0,0,0,0.018)',
-    text:          '#0f172a',
-    textSub:       '#475569',
-    textMuted:     '#94a3b8',
-    textFaint:     '#cbd5e1',
-    inputBg:       'rgba(0,0,0,0.03)',
-    inputBorder:   'rgba(0,0,0,0.1)',
-    selectBg:      '#ffffff',
-    infoBg:        'rgba(22,163,74,0.07)',
-    infoBorder:    'rgba(22,163,74,0.25)',
-    infoText:      '#15803d',
-    btnBg:         'rgba(37,99,235,0.08)',
-    btnBorder:     'rgba(37,99,235,0.25)',
-    btnText:       '#1d4ed8',
-    modalBg:       '#ffffff',
-    gridStroke:    'rgba(0,0,0,0.07)',
-    axisColor:     '#94a3b8',
-    tooltipBg:     '#ffffff',
-    tooltipBorder: 'rgba(0,0,0,0.1)',
-    qCardBg:       '#ffffff',
-    posBg:   'rgba(16,185,129,0.1)', posText: '#15803d',
-    negBg:   'rgba(239,68,68,0.1)',  negText: '#dc2626',
-    shadow:  '0 1px 8px rgba(0,0,0,0.07)',
-  },
-} as const;
+// IMPORT dari dashboard-theme (Sesuaikan path-nya)
+import { 
+  Theme, tk, UNIT_OPTIONS 
+} from '@/lib/dashboard-theme'; 
 
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 const QUARTER_COLORS: Record<string, string> = {
@@ -95,30 +33,22 @@ const QUARTER_COLORS: Record<string, string> = {
 };
 const varColor = (v: number) => v >= 0 ? '#10b981' : '#ef4444';
 
-const UNIT_OPTIONS = [
-  { value: 'units_bks',  label: 'Jual (Bks Net)',  shortLabel: 'Bks'  },
-  { value: 'units_slop', label: 'Jual (Slop Net)', shortLabel: 'Slop' },
-  { value: 'units_bal',  label: 'Jual (Bal Net)',  shortLabel: 'Bal'  },
-  { value: 'units_dos',  label: 'Jual (Dos Net)',  shortLabel: 'Dos'  },
-  { value: 'omzet',      label: 'Omzet (Rp)',      shortLabel: 'Rp'   },
-];
-
 const formatUnitValue = (value: number, unit?: string) => {
   if (unit === 'omzet') {
     const av = Math.abs(value);
     if (av >= 1e12) return `Rp ${(value / 1e9).toFixed(1)}M`;
-    // if (av >= 1e6) return `Rp ${(value / 1e6).toFixed(1)}jt`;
-    // if (av >= 1e3) return `Rp ${(value / 1e3).toFixed(0)}rb`;
     return `Rp ${Math.round(value).toLocaleString('id-ID')}`;
   }
   return formatQuantity(value);
 };
 
+// Mengambil fullLabel dari global UNIT_OPTIONS
 const getUnitLabel = (unit: string) =>
-  UNIT_OPTIONS.find(o => o.value === unit)?.label ?? UNIT_OPTIONS[0].label;
+  UNIT_OPTIONS.find(o => o.value === unit)?.fullLabel ?? UNIT_OPTIONS[0].fullLabel;
 
+// Mengambil label (pendek) dari global UNIT_OPTIONS
 const getUnitShortLabel = (unit: string) =>
-  UNIT_OPTIONS.find(o => o.value === unit)?.shortLabel ?? UNIT_OPTIONS[0].shortLabel;
+  UNIT_OPTIONS.find(o => o.value === unit)?.label ?? UNIT_OPTIONS[0].label;
 
 const makeYFmt = (unit: string) => (v: number) => {
   if (unit === 'omzet') {
@@ -135,8 +65,6 @@ const makeYFmt = (unit: string) => (v: number) => {
 // Helpers
 function getDetailActual(d: any, unit: string): number {
   if (unit === 'omzet') {
-    // FIX v11: backend sekarang selalu push omzet: { target, actual }
-    // di setiap QuarterlyProductDetail — cukup baca .actual-nya.
     if (d.omzet?.actual !== undefined && d.omzet.actual !== null) return d.omzet.actual;
     if (typeof d.omzet === 'number') return d.omzet;
     return 0;
@@ -160,7 +88,6 @@ function getMonthFromWeek(week: number, year: number): string {
   return months[date.getMonth()];
 }
 
-// FIX v11: tambah omzet ke WeekUnitData
 type WeekUnitData = {
   units_dos: number; units_bks: number; units_slop: number; units_bal: number;
   omzet?: number;   
@@ -177,7 +104,7 @@ function monthHasTarget(m: any): boolean {
 
 // AchieveBadge
 function AchieveBadge({ pct, theme, hasTarget }: { pct: number; theme: Theme; hasTarget: boolean }) {
-  const t = TK[theme];
+  const t = tk[theme];
   if (!hasTarget) {
     return (
       <span style={{ padding: '2px 8px', borderRadius: 5, fontSize: 10, fontWeight: 700, fontFamily: 'IBM Plex Mono, monospace', background: t.inputBg, color: t.textMuted, border: `1px solid ${t.inputBorder}` }}>N/A</span>
@@ -193,7 +120,7 @@ function AchieveBadge({ pct, theme, hasTarget }: { pct: number; theme: Theme; ha
 
 // ViewToggle
 function ViewToggle({ value, onChange, theme }: { value: 'chart' | 'table'; onChange: (v: 'chart' | 'table') => void; theme: Theme }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <div style={{ display: 'flex', border: `1px solid ${t.inputBorder}`, borderRadius: 7, overflow: 'hidden' }}>
       {(['chart', 'table'] as const).map(mode => (
@@ -212,7 +139,7 @@ function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, childre
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   children: React.ReactNode; theme: Theme;
 }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', border: `1px solid ${t.inputBorder}`, borderRadius: 8, overflow: 'hidden' }}>
       <span style={{ padding: '6px 10px', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600, color: accentColor, background: `${accentColor}18`, borderRight: `1px solid ${t.inputBorder}`, display: 'flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>{label}</span>
@@ -225,7 +152,7 @@ function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, childre
 
 // ExpandBtn
 function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: t.btnBg, border: `1px solid ${t.btnBorder}`, color: t.btnText, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0 }}>
       <Maximize2 size={12} /> Perbesar
@@ -234,9 +161,8 @@ function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
 }
 
 // TableBtn
-// Sama seperti di WeekComparisonComponent: toggle Chart <-> Tabel di kartu overview.
 function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
-  const t = TK[theme];
+  const t = tk[theme];
   return (
     <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: active ? `${t.btnText}22` : t.btnBg, border: `1px solid ${active ? t.btnText : t.btnBorder}`, color: t.btnText, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0, transition: 'all 0.15s' }}>
       {active
@@ -250,7 +176,7 @@ function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Them
 
 // ChartTooltip
 function ChartTooltip({ active, payload, label, labelPrefix, theme, unit }: any) {
-  const t = TK[theme as Theme];
+  const t = tk[theme as Theme];
   if (!active || !payload?.length) return null;
   const visible = payload.filter((p: any) => p.value != null);
   if (!visible.length) return null;
@@ -287,7 +213,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
   tdBase: React.CSSProperties;
   expandModal: (content: React.ReactNode, title: string) => void;
 }) {
-  const t       = TK[theme];
+  const t       = tk[theme];
   const isOmzet = selectedUnit === 'omzet';
   const yFmt    = makeYFmt(selectedUnit);
 
@@ -295,7 +221,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
   const [selectedQ, setSelectedQ]     = useState('all');
 
   const axisProps = {
-    tick: { fill: t.axisColor, fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' },
+    tick: { fill: t.textMuted, fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' },
     axisLine: { stroke: t.border },
     tickLine: false as const,
   };
@@ -341,7 +267,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
           {...axisProps}
           axisLine={false}
           width={isOmzet ? 84 : 72}
-          label={!isOmzet ? { value: getUnitShortLabel(selectedUnit), angle: -90, position: 'insideLeft', offset: 10, style: { fill: t.axisColor, fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' } } : undefined}
+          label={!isOmzet ? { value: getUnitShortLabel(selectedUnit), angle: -90, position: 'insideLeft', offset: 10, style: { fill: t.textMuted, fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' } } : undefined}
         />
         {!isOmzet && <YAxis yAxisId="right" orientation="right" tickFormatter={v => `${v.toFixed(0)}%`} {...axisProps} axisLine={false} />}
         <Tooltip content={<ChartTooltip labelPrefix="Minggu: " theme={theme} unit={selectedUnit} />} />
@@ -351,7 +277,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
             <Cell key={i} fill={(QUARTER_COLORS[(e as any).quarter] ?? '#3b82f6') + ((e.actual ?? 0) >= (e.target ?? 0) ? 'ff' : '99')} />
           ))}
         </Bar>
-        {!isOmzet && <Line yAxisId="right" type="monotone" dataKey="achievement" fill="#f59e0b" connectNulls={false} stroke="#f59e0b" strokeWidth={2} dot={false} name="Achievement %" />}
+        {!isOmzet && <Line yAxisId="right" type="monotone" dataKey="achievement" fill="#f59e0b" connectNulls={false} stroke="#f87171" strokeWidth={2} dot={{ r: 4, fill: '#f87171', strokeWidth: 0 }} name="Achievement %" />}
         {!isOmzet && <ReferenceLine yAxisId="right" y={100} stroke="#10b981" strokeDasharray="4 4" strokeWidth={1.5} />}
       </ComposedChart>
     </ResponsiveContainer>
@@ -372,7 +298,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
           { label: 'On Target',    value: isOmzet ? '—' : onTarget, color: t.posText },
           { label: 'Below Target', value: isOmzet ? '—' : belowTgt, color: t.negText },
         ].map((s, i) => (
-          <div key={i} style={{ padding: '10px 14px', borderRadius: 10, background: t.qCardBg, border: `1px solid ${t.borderCard}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div key={i} style={{ padding: '10px 14px', borderRadius: 10, background: t.cardBg, border: `1px solid ${t.borderCard}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 10, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{s.label}</span>
             <span style={{ fontSize: 18, fontWeight: 800, color: s.color, fontFamily: 'IBM Plex Mono, monospace' }}>{s.value}</span>
           </div>
@@ -405,8 +331,8 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
             ))}
             {!isOmzet && (
               <>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f59e0b', fontFamily: 'IBM Plex Sans, sans-serif' }}>
-                  <span style={{ width: 18, height: 2, background: '#f59e0b', borderRadius: 2 }} />Achievement %
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f87171', fontFamily: 'IBM Plex Sans, sans-serif' }}>
+                  <span style={{ width: 18, height: 2, background: '#f87171', borderRadius: 2 }} />Achievement %
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#10b981', fontFamily: 'IBM Plex Sans, sans-serif' }}>
                   <span style={{ width: 18, height: 2, background: '#10b981', borderRadius: 2 }} />100% Line
@@ -446,7 +372,7 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
                         <thead>
                           <tr>
                             {['Week', ...(isOmzet ? ['Omzet'] : [`Target (${getUnitShortLabel(selectedUnit)})`, `Actual (${getUnitShortLabel(selectedUnit)})`, 'Variance',  'Achievement'])].map((h, i) => (
-                              <th key={h} style={{ padding: '8px 12px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.tableHeadText, background: t.tableHeadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+                              <th key={h} style={{ padding: '8px 12px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.theadText, background: t.theadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -468,7 +394,6 @@ function WeeklyDetailView({ data, selectedUnit, theme, card, tdBase, expandModal
                                     <td style={{ ...tdBase, textAlign: 'right', fontSize: 11, color: ht ? t.text : t.textFaint }}>{ht ? formatUnitValue(ud.target, selectedUnit) : '—'}</td>
                                     <td style={{ ...tdBase, textAlign: 'right', color: t.text, fontWeight: 700, fontSize: 11 }}>{ud.actual > 0 ? formatUnitValue(ud.actual, selectedUnit) : <span style={{ color: t.textFaint }}>—</span>}</td>
                                     <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(w.variance) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? `${w.variance >= 0 ? '+' : ''}${formatUnitValue(w.variance, selectedUnit)}` : '—'}</td>
-                                    {/* <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(w.variancePercentage) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? formatPercentage(w.variancePercentage) : '—'}</td> */}
                                     <td style={{ ...tdBase, textAlign: 'right' }}><AchieveBadge pct={w.achievement} theme={theme} hasTarget={ht} /></td>
                                   </>
                                 )}
@@ -496,7 +421,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
   tdBase: React.CSSProperties;
   expandModal: (content: React.ReactNode, title: string) => void;
 }) {
-  const t       = TK[theme];
+  const t       = tk[theme];
   const isOmzet = selectedUnit === 'omzet';
   const yFmt    = makeYFmt(selectedUnit);
 
@@ -504,7 +429,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
   const [selectedQ, setSelectedQ]     = useState('all');
 
   const axisProps = {
-    tick: { fill: t.axisColor, fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' },
+    tick: { fill: t.textMuted, fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' },
     axisLine: { stroke: t.border },
     tickLine: false as const,
   };
@@ -547,7 +472,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
           {...axisProps}
           axisLine={false}
           width={isOmzet ? 84 : 72}
-          label={!isOmzet ? { value: getUnitShortLabel(selectedUnit), angle: -90, position: 'insideLeft', offset: 10, style: { fill: t.axisColor, fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' } } : undefined}
+          label={!isOmzet ? { value: getUnitShortLabel(selectedUnit), angle: -90, position: 'insideLeft', offset: 10, style: { fill: t.textMuted, fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' } } : undefined}
         />
         {!isOmzet && <YAxis yAxisId="right" orientation="right" tickFormatter={v => `${v.toFixed(0)}%`} {...axisProps} axisLine={false} />}
         <Tooltip content={<ChartTooltip labelPrefix="Bulan: " theme={theme} unit={selectedUnit} />} />
@@ -557,7 +482,7 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
             <Cell key={i} fill={(QUARTER_COLORS[(e as any).quarter] ?? '#3b82f6') + ((e.actual ?? 0) >= (e.target ?? 0) ? 'ff' : '99')} />
           ))}
         </Bar>
-        {!isOmzet && <Line yAxisId="right" type="monotone" dataKey="achievement" connectNulls={false} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 0 }} name="Achievement %" />}
+        {!isOmzet && <Line yAxisId="right" type="monotone" dataKey="achievement" connectNulls={false} stroke="#f87171" strokeWidth={2.5} dot={{ r: 4, fill: '#f87171', strokeWidth: 0 }} name="Achievement %" />}
         {!isOmzet && <ReferenceLine yAxisId="right" y={100} stroke="#10b981" strokeDasharray="4 4" strokeWidth={1.5} />}
       </ComposedChart>
     </ResponsiveContainer>
@@ -575,17 +500,16 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
               : monthsWithTarget.length > 0 ? `${avgAch.toFixed(1)}%` : 'N/A',
             color: isOmzet ? t.text : (monthsWithTarget.length > 0 ? (avgAch >= 100 ? t.posText : t.negText) : t.textMuted),
           },
-          { label: 'On Target',    value: isOmzet ? '—' : onTarget,                           color: t.posText },
+          { label: 'On Target',    value: isOmzet ? '—' : onTarget,                            color: t.posText },
           { label: 'Below Target', value: isOmzet ? '—' : monthsWithTarget.length - onTarget, color: t.negText },
         ].map((s, i) => (
-          <div key={i} style={{ padding: '10px 14px', borderRadius: 10, background: t.qCardBg, border: `1px solid ${t.borderCard}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div key={i} style={{ padding: '10px 14px', borderRadius: 10, background: t.cardBg, border: `1px solid ${t.borderCard}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 10, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{s.label}</span>
             <span style={{ fontSize: 18, fontWeight: 800, color: s.color, fontFamily: 'IBM Plex Mono, monospace' }}>{s.value}</span>
           </div>
         ))}
       </div>
 
-      {/* Achievement / Omzet heatmap */}
       <div style={card()}>
         <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
           {isOmzet ? 'Omzet per Bulan' : `Achievement per Bulan · ${getUnitLabel(selectedUnit)}`}
@@ -621,16 +545,12 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
         </div>
       </div>
 
-      {/* Chart / Table */}
       <div style={card()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             {isOmzet ? 'Omzet Bulanan' : `Target vs Actual Bulanan · ${getUnitLabel(selectedUnit)}`}
           </span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* FIX: filter Kuartal sebelumnya tidak ada di sini, padahal state selectedQ
-                sudah dipakai untuk memfilter data. Tanpa dropdown ini, user tidak bisa
-                mengubah selectedQ sama sekali di tab Detail Bulanan. */}
             <FilterSelect label="Kuartal" accentColor="#3b82f6" value={selectedQ} onChange={e => setSelectedQ(e.target.value)} theme={theme}>
               <option value="all" style={{ background: t.selectBg }}>Semua</option>
               {data.map(q => <option key={q.quarter} value={q.quarter} style={{ background: t.selectBg }}>{q.quarter}</option>)}
@@ -642,7 +562,6 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
           </div>
         </div>
 
-        {/* FIX: legend kuartal hanya relevan saat selectedQ === 'all' (konsisten dengan WeeklyDetailView) */}
         {displayMode === 'chart' && selectedQ === 'all' && (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
             {data.map(q => (
@@ -651,8 +570,8 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
               </span>
             ))}
             {!isOmzet && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f59e0b', fontFamily: 'IBM Plex Sans, sans-serif' }}>
-                <span style={{ width: 18, height: 2, background: '#f59e0b', borderRadius: 2 }} />Achievement %
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f87171', fontFamily: 'IBM Plex Sans, sans-serif' }}>
+                <span style={{ width: 18, height: 2, background: '#f87171', borderRadius: 2 }} />Achievement %
               </span>
             )}
           </div>
@@ -667,13 +586,11 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
                 <thead>
                   <tr>
                     {['Quarter', 'Month', ...(isOmzet ? ['Omzet'] : [`Target (${getUnitShortLabel(selectedUnit)})`, `Actual (${getUnitShortLabel(selectedUnit)})`, 'Variance',  'Achievement'])].map((h, i) => (
-                      <th key={h} style={{ padding: '8px 12px', textAlign: i <= 1 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.tableHeadText, background: t.tableHeadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+                      <th key={h} style={{ padding: '8px 12px', textAlign: i <= 1 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.theadText, background: t.theadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {/* FIX: sebelumnya pakai `allMonthly` (tidak ikut filter Kuartal). Sekarang
-                      pakai `filteredMonthly` supaya konsisten dengan summary cards & heatmap di atas. */}
                   {filteredMonthly.map((m, idx) => {
                     const ht = isOmzet ? false : monthHasTarget(m);
                     const ud = isOmzet ? { target: 0, actual: m.actual ?? 0 } : ((m as any)[selectedUnit] || { target: m.target, actual: m.actual });
@@ -690,7 +607,6 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
                             <td style={{ ...tdBase, textAlign: 'right', fontSize: 11, color: ht ? t.text : t.textFaint }}>{ht ? formatUnitValue(ud.target, selectedUnit) : '—'}</td>
                             <td style={{ ...tdBase, textAlign: 'right', color: t.text, fontWeight: 700, fontSize: 11 }}>{ud.actual > 0 ? formatUnitValue(ud.actual, selectedUnit) : <span style={{ color: t.textFaint }}>—</span>}</td>
                             <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(m.variance) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? `${m.variance >= 0 ? '+' : ''}${formatUnitValue(m.variance, selectedUnit)}` : '—'}</td>
-                            {/* <td style={{ ...tdBase, textAlign: 'right', color: ht ? varColor(m.variancePercentage) : t.textFaint, fontWeight: 700, fontSize: 11 }}>{ht ? formatPercentage(m.variancePercentage) : '—'}</td> */}
                             <td style={{ ...tdBase, textAlign: 'right' }}><AchieveBadge pct={m.achievement} theme={theme} hasTarget={ht} /></td>
                           </>
                         )}
@@ -708,9 +624,6 @@ function MonthlyDetailView({ data, selectedUnit, theme, card, tdBase, expandModa
 }
 
 // OverviewTableView
-// Tabel sortable untuk chart Bar ("Target vs Actual") & Pie ("Distribusi") di
-// tab Overview. Dipakai baik inline di kartu (mode toggle) maupun di dalam modal
-// saat tombol Perbesar dipencet ketika lagi mode tabel.
 type OverviewSortKey = 'quarter' | 'target' | 'actual' | 'variance' | 'variancePercentage' | 'achievement' | 'percentOfTotal';
 
 function OverviewTableView({
@@ -722,7 +635,7 @@ function OverviewTableView({
   isOmzet: boolean;
   theme: Theme;
 }) {
-  const t = TK[theme];
+  const t = tk[theme];
   const [sort, setSort] = useState<{ key: OverviewSortKey; dir: 'asc' | 'desc' }>({ key: 'quarter', dir: 'asc' });
 
   const totalActual = useMemo(() => data.reduce((s, q) => s + (q.actual ?? 0), 0), [data]);
@@ -784,7 +697,7 @@ function OverviewTableView({
             <tr>
               {cols.map((c, i) => (
                 <th key={c.key} onClick={() => handleSort(c.key)}
-                  style={{ padding: '9px 14px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.tableHeadText, background: t.tableHeadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
+                  style={{ padding: '9px 14px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.theadText, background: t.theadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: i === 0 ? 'flex-start' : 'flex-end', gap: 2, width: '100%' }}>
                     {c.label}<SortArrows colKey={c.key} />
                   </span>
@@ -837,7 +750,7 @@ interface QuarterlyAnalysisProps {
 
 export default function QuarterlyAnalysisComponent({ data, theme: themeProp, selectedUnit: propSelectedUnit, onUnitChange }: QuarterlyAnalysisProps) {
   const theme: Theme = themeProp ?? 'light';
-  const t = TK[theme];
+  const t = tk[theme];
 
   const [internalSelectedUnit, setInternalSelectedUnit] = useState('units_dos');
   const selectedUnit    = propSelectedUnit ?? internalSelectedUnit;
@@ -851,7 +764,6 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
   const [viewMode, setViewMode]                 = useState<'overview' | 'weekly' | 'monthly'>('overview');
   const [modalContent, setModalContent]         = useState<React.ReactNode>(null);
   const [modalTitle, setModalTitle]             = useState('');
-  // Toggle Chart <-> Tabel untuk dua kartu di tab Overview (bar & pie)
   const [overviewTableView, setOverviewTableView] = useState({  bar: false,  pie: false,});
 
   const openModal  = (content: React.ReactNode, title: string) => { setModalContent(content); setModalTitle(title); };
@@ -878,7 +790,6 @@ export default function QuarterlyAnalysisComponent({ data, theme: themeProp, sel
   return Array.from(prods).sort();
 }, [data, selectedCategory]);
 
-// reset produk kalau kategori berubah dan produk lama sudah tidak ada di daftar
 useEffect(() => {
   if (selectedProduct !== 'all' && !availableProducts.includes(selectedProduct)) {
     setSelectedProduct('all');
@@ -887,15 +798,6 @@ useEffect(() => {
 
   const quarterOptions = useMemo(() => Array.from(new Set(data.map(q => q.quarter))).sort(), [data]);
 
-  // FIX UTAMA: sebelumnya ada percabangan khusus untuk `selectedCategory === 'all'`
-  // yang langsung `return q` tanpa pernah me-rebuild weeklyBreakdown/monthlyBreakdown
-  // sesuai `selectedUnit` yang dipilih. Akibatnya saat kategori masih 'all' (kondisi
-  // default), tab Detail Bulanan (dan Mingguan jika backend tidak kirim breakdown per
-  // unit di level bulanan) tidak ikut berubah walau Unit/Kuartal diganti — karena yang
-  // dibaca tetap data mentah dari `data` asli, bukan hasil rebuild.
-  // Sekarang `filteredDetails` selalu dihitung (full kalau 'all', terfilter kalau ada
-  // kategori spesifik), dan blok rebuild weekly/monthly SELALU dijalankan terlepas dari
-  // status kategori, supaya Filter Data (Unit, Kategori, Kuartal) konsisten ke semua tab.
   const filteredData = useMemo(() => {
     return data
       .filter(q => selectedQuarter === 'all' || q.quarter === selectedQuarter)
@@ -927,7 +829,7 @@ useEffect(() => {
 
         const newWeeklyBreakdown = (q.weeklyBreakdown ?? []).map((wb: any) => {
           const week = wb.week;
-          let dos = 0, bks = 0, slop = 0, bal = 0, omz = 0; // ← FIX v11: tambah omz
+          let dos = 0, bks = 0, slop = 0, bal = 0, omz = 0;
           filteredDetails.forEach((d: any) => {
             const wa = (d.weeklyActuals as Record<number, WeekUnitData> | undefined)?.[week];
             if (wa) {
@@ -935,7 +837,7 @@ useEffect(() => {
               bks  += wa.units_bks  ?? 0;
               slop += wa.units_slop ?? 0;
               bal  += wa.units_bal  ?? 0;
-              omz  += wa.omzet      ?? 0; // ← FIX v11: baca omzet per minggu dari weeklyActuals
+              omz  += wa.omzet      ?? 0; 
             }
           });
 
@@ -957,8 +859,6 @@ useEffect(() => {
             tgtSlop = parseFloat(tgtSlop.toFixed(2)); tgtBal = parseFloat(tgtBal.toFixed(2));
           }
 
-          //    FIX v11: saat isOmzet, gunakan omz (terfilter kategori)
-          //    bukan wb.actual yang merupakan total SEMUA kategori
           const selActual = isOmzet
             ? omz
             : selectedUnit === 'units_bks'  ? bks
@@ -980,7 +880,6 @@ useEffect(() => {
           const bks  = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_bks?.actual  ?? 0), 0);
           const slop = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_slop?.actual ?? 0), 0);
           const bal  = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_bal?.actual  ?? 0), 0);
-          // FIX v11: omzet bulanan dari sum wb.actual (yg sudah pakai omz terfilter)
           const omzMonth = monthWeeks.reduce((s: number, wb: any) => s + (wb.actual ?? 0), 0);
           const tDos = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_dos?.target  ?? 0), 0);
           const tBks = monthWeeks.reduce((s: number, wb: any) => s + (wb.units_bks?.target  ?? 0), 0);
@@ -1001,13 +900,10 @@ useEffect(() => {
 
   const performanceData = filteredData.map(q => ({ quarter: q.quarter, target: q.target, actual: q.actual, achievement: q.target > 0 ? (q.actual / q.target) * 100 : 0 }));
   const pieData         = filteredData.map(q => ({ name: q.quarter, value: q.actual }));
-  const quartersWithTgt = isOmzet ? [] : filteredData.filter(q => q.target > 0);
-  const avgAchievement  = quartersWithTgt.length > 0 ? quartersWithTgt.reduce((s, q) => s + (q.actual / q.target) * 100, 0) / quartersWithTgt.length : 0;
-  const bestQ           = filteredData.length > 0 ? filteredData.reduce((m, q) => q.actual > m.actual ? q : m) : null;
   const yTickFmt        = makeYFmt(selectedUnit);
 
   const axisProps = {
-    tick: { fill: t.axisColor, fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' },
+    tick: { fill: t.textMuted, fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' },
     axisLine: { stroke: t.border },
     tickLine: false as const,
   };
@@ -1025,7 +921,7 @@ useEffect(() => {
         <BarChart data={performanceData} margin={{ top: 4, right: 12, bottom: 4, left: 8 }} barGap={4}>
           <CartesianGrid strokeDasharray="3 3" stroke={t.gridStroke} />
           <XAxis dataKey="quarter" {...axisProps} />
-          <YAxis tickFormatter={yTickFmt} {...axisProps} axisLine={false} width={isOmzet ? 84 : 72} label={!isOmzet ? { value: getUnitShortLabel(selectedUnit), angle: -90, position: 'insideLeft', offset: 10, style: { fill: t.axisColor, fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' } } : undefined} />
+          <YAxis tickFormatter={yTickFmt} {...axisProps} axisLine={false} width={isOmzet ? 84 : 72} label={!isOmzet ? { value: getUnitShortLabel(selectedUnit), angle: -90, position: 'insideLeft', offset: 10, style: { fill: t.textMuted, fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' } } : undefined} />
           <Tooltip content={<ChartTooltip labelPrefix="Quarter: " theme={theme} unit={selectedUnit} />} />
           {withLegend && <Legend wrapperStyle={{ fontSize: 12, color: t.textSub, paddingTop: 12 }} />}
           {!isOmzet && <Bar dataKey="target" fill="#94a3b8" name="Target" radius={[3,3,0,0]} maxBarSize={40} />}
@@ -1052,26 +948,17 @@ useEffect(() => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, fontFamily: 'IBM Plex Sans, sans-serif' }}>
 
-      {/* Info banner */}
-      {/* <div style={{ padding: '10px 14px', background: t.infoBg, border: `1px solid ${t.infoBorder}`, borderRadius: 10 }}>
-        <p style={{ margin: 0, fontSize: 12, color: t.infoText, fontFamily: 'IBM Plex Mono, monospace', lineHeight: 1.6 }}>
-          <strong>Periode:</strong> {selectedQuarter === 'all' ? 'Q1–Q4' : selectedQuarter}
-          &nbsp;|&nbsp;<strong>{isOmzet ? 'Total Omzet' : 'Rata-rata Achievement'}:</strong> {isOmzet ? formatUnitValue(filteredData.reduce((s, q) => s + q.actual, 0), 'omzet') : (quartersWithTgt.length > 0 ? `${avgAchievement.toFixed(1)}%` : 'N/A')}
-          &nbsp;|&nbsp;<strong>Best Quarter:</strong> {bestQ?.quarter ?? '—'}
-          {selectedCategory !== 'all' && <>&nbsp;|&nbsp;<strong>Kategori:</strong> {selectedCategory}</>}
-          &nbsp;|&nbsp;<strong>Unit:</strong> {getUnitLabel(selectedUnit)}
-          {isOmzet && <>&nbsp;|&nbsp;<span style={{ opacity: 0.7 }}>Target tidak tersedia untuk Omzet</span></>}
-        </p>
-      </div> */}
-
       {/* Filter */}
       <div style={card()}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Filter Data</span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            
+            {/* Menggunakan UNIT_OPTIONS dari global theme */}
             <FilterSelect label="Unit" accentColor="#10b981" value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} theme={theme}>
-              {UNIT_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ background: t.selectBg }}>{o.label}</option>)}
+              {UNIT_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ background: t.selectBg }}>{o.fullLabel}</option>)}
             </FilterSelect>
+            
             <FilterSelect label="Kuartal" accentColor="#3b82f6" value={selectedQuarter} onChange={e => setSelectedQuarter(e.target.value)} theme={theme}>
               <option value="all" style={{ background: t.selectBg }}>Semua Kuartal</option>
               {quarterOptions.map(q => <option key={q} value={q} style={{ background: t.selectBg }}>{q}</option>)}
@@ -1161,7 +1048,7 @@ useEffect(() => {
                 const achievement = hasQTarget ? (q.actual / q.target) * 100 : 0;
                 const hit         = q.actual >= q.target;
                 return (
-                  <div key={q.quarter} style={{ background: t.qCardBg, border: `1px solid ${isOmzet ? t.borderCard : (!hasQTarget ? t.borderCard : (hit ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.2)'))}`, borderLeft: `3px solid ${isOmzet ? t.btnText : (!hasQTarget ? t.textFaint : (hit ? '#10b981' : '#ef4444'))}`, borderRadius: 10, padding: 16 }}>
+                  <div key={q.quarter} style={{ background: t.cardBg, border: `1px solid ${isOmzet ? t.borderCard : (!hasQTarget ? t.borderCard : (hit ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.2)'))}`, borderLeft: `3px solid ${isOmzet ? t.btnText : (!hasQTarget ? t.textFaint : (hit ? '#10b981' : '#ef4444'))}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                       <span style={{ fontSize: 16, fontWeight: 800, color: t.text, fontFamily: 'IBM Plex Mono, monospace' }}>{q.quarter}</span>
                       {isOmzet
@@ -1172,10 +1059,10 @@ useEffect(() => {
                       }
                     </div>
                     {[
-                      { label: 'Target',     value: hasQTarget ? formatUnitValue(q.target, selectedUnit) : '—',                                                               color: t.textSub,                                                bold: false },
-                      { label: 'Actual',     value: q.actual > 0 ? formatUnitValue(q.actual, selectedUnit) : '—',                                                            color: t.text,                                                   bold: true  },
-                      { label: 'Variance',   value: hasQTarget ? `${q.variance >= 0 ? '+' : ''}${formatUnitValue(q.variance, selectedUnit)}` : '—',                         color: hasQTarget ? varColor(q.variance) : t.textFaint,          bold: true  },
-                      { label: 'Variance %', value: hasQTarget ? formatPercentage(q.variancePercentage) : '—',                                                                color: hasQTarget ? varColor(q.variancePercentage) : t.textFaint, bold: true  },
+                      { label: 'Target',     value: hasQTarget ? formatUnitValue(q.target, selectedUnit) : '—',                                                     color: t.textSub,                                               bold: false },
+                      { label: 'Actual',     value: q.actual > 0 ? formatUnitValue(q.actual, selectedUnit) : '—',                                                   color: t.text,                                                  bold: true  },
+                      { label: 'Variance',   value: hasQTarget ? `${q.variance >= 0 ? '+' : ''}${formatUnitValue(q.variance, selectedUnit)}` : '—',                 color: hasQTarget ? varColor(q.variance) : t.textFaint,         bold: true  },
+                      { label: 'Variance %', value: hasQTarget ? formatPercentage(q.variancePercentage) : '—',                                                      color: hasQTarget ? varColor(q.variancePercentage) : t.textFaint, bold: true  },
                     ].map((row, i) => (
                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
                         <span style={{ fontSize: 12, color: t.text }}>{row.label}</span>
@@ -1213,7 +1100,7 @@ useEffect(() => {
                   <thead>
                     <tr>
                       {['Quarter', ...(isOmzet ? ['Omzet'] : [`Target (${getUnitShortLabel(selectedUnit)})`, `Actual (${getUnitShortLabel(selectedUnit)})`, 'Variance', 'Variance %', 'Achievement'])].map((h, i) => (
-                        <th key={h} style={{ padding: '9px 14px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.tableHeadText, background: t.tableHeadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+                        <th key={h} style={{ padding: '9px 14px', textAlign: i === 0 ? 'left' : 'right', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: t.theadText, background: t.theadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1258,7 +1145,7 @@ useEffect(() => {
             <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px', flexShrink: 0 }}>
               <div style={{ width: 36, height: 4, borderRadius: 2, background: t.textFaint }} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 12px', borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg, flexShrink: 0, gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 12px', borderBottom: `1px solid ${t.border}`, background: t.theadBg, flexShrink: 0, gap: 10 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: t.text, lineHeight: 1.3, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {expandedChart === 'bar' ? (isOmzet ? 'Omzet per Kuartal' : `Target vs Actual · ${getUnitLabel(selectedUnit)}`) : `Distribusi · ${getUnitLabel(selectedUnit)}`}
               </span>
@@ -1280,7 +1167,7 @@ useEffect(() => {
             <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px', flexShrink: 0 }}>
               <div style={{ width: 36, height: 4, borderRadius: 2, background: t.textFaint }} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 12px', borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg, flexShrink: 0, gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 12px', borderBottom: `1px solid ${t.border}`, background: t.theadBg, flexShrink: 0, gap: 10 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: t.text, lineHeight: 1.3, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modalTitle}</span>
               <button onClick={closeModal} style={{ background: t.inputBg, border: `1px solid ${t.inputBorder}`, cursor: 'pointer', color: t.textMuted, padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600 }}>
                 <X size={14} /> Tutup

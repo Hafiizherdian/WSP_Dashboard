@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { OutletSalesData } from '@/types/sales';
 
-// ─── Theme tokens ─────────────────────────────────────────────────────────────
+// Theme tokens
 type Theme = 'dark' | 'light';
 
 const TK = {
@@ -90,7 +90,7 @@ type AccentKey = 'blue'|'green'|'purple'|'orange'|'red'|'indigo'|'pink';
 type CardKey   = 'card1'|'card2'|'card3'|'card4';
 type SortDir   = 'asc'|'desc'|null;
 
-// ─── Format Helpers ───────────────────────────────────────────────────────────
+// Format Helpers
 const fmtK = (v: number) => {
   if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return Math.round(v).toLocaleString('id-ID');
@@ -128,7 +128,7 @@ const getUnitLongLabel = (u: string) => {
   return 'Jual (Dos Net)';
 };
 
-// ─── Responsive Hook ──────────────────────────────────────────────────────────
+// Responsive Hook
 function useBreakpoint() {
   const [width, setWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth : 1024
@@ -141,7 +141,7 @@ function useBreakpoint() {
   return { isMobile: width < 640, isTablet: width >= 640 && width < 1024, isDesktop: width >= 1024 };
 }
 
-// ─── FilterSelect ─────────────────────────────────────────────────────────────
+// FilterSelect
 function FilterSelect({ label, value, onChange, options, accentKey, theme, isUnitFilter }: {
   label: string; value: string; onChange: (v: string) => void;
   options: (string | { value: string; label: string })[]; accentKey: AccentKey; theme: Theme;
@@ -155,7 +155,7 @@ function FilterSelect({ label, value, onChange, options, accentKey, theme, isUni
       <span style={{ padding: '6px 9px', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, color: accent.text, background: active ? accent.bg : t.inputBg, borderRight: `1px solid ${active ? accent.border : t.borderInput}`, display: 'flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.2s' }}>
         {label}
       </span>
-      <select value={value} onChange={e => onChange(e.target.value)} style={{ background: t.inputBg, border: 'none', outline: 'none', padding: '6px 24px 6px 8px', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', color: active ? t.text : t.textMuted, cursor: 'pointer', flex: 1, minWidth: 0, appearance: 'none', width: '100%', fontWeight: active ? 600 : 400 }}>
+      <select value={value} onChange={e => onChange(e.target.value)} style={{ background: t.inputBg, border: 'none', outline: 'none', padding: '6px 24px 6px 8px', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', color: active ? t.text : t.text, cursor: 'pointer', flex: 1, minWidth: 0, appearance: 'none', width: '100%', fontWeight: active ? 600 : 400 }}>
         {!isUnitFilter && <option value="all" style={{ background: t.selectBg }}>Semua</option>}
         {options.map(o => {
           const val = typeof o === 'string' ? o : o.value;
@@ -167,7 +167,7 @@ function FilterSelect({ label, value, onChange, options, accentKey, theme, isUni
   );
 }
 
-// ─── SearchableSelect ─────────────────────────────────────────────────────────
+// SearchableSelect (Versi Modal)
 function SearchableSelect({ label, value, onChange, options, accentKey, theme, placeholder }: {
   label: string; value: string;
   onChange: (customerNo: string, customerName: string) => void;
@@ -179,15 +179,15 @@ function SearchableSelect({ label, value, onChange, options, accentKey, theme, p
   const active  = value !== '';
   const [open,  setOpen]  = useState(false);
   const [query, setQuery] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
 
+  // Handle body scroll lock & tutup via tombol Escape
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+    if (!open) return;
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', fn);
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', fn); document.body.style.overflow = ''; };
+  }, [open]);
 
   const selectedOption = options.find(o => o.no === value);
   const displayValue   = selectedOption
@@ -196,16 +196,17 @@ function SearchableSelect({ label, value, onChange, options, accentKey, theme, p
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    if (!q) return options.slice(0, 60);
+    if (!q) return options.slice(0, 150); // Limit dinaikkan karena di dalam modal
     return options.filter(o =>
       o.name.toLowerCase().includes(q) || o.no.toLowerCase().includes(q)
-    ).slice(0, 60);
+    ).slice(0, 150);
   }, [options, query]);
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }}>
+      {/* Tombol Pemicu Modal */}
       <div
-        onClick={() => setOpen(p => !p)}
+        onClick={() => setOpen(true)}
         style={{
           display: 'flex', alignItems: 'stretch',
           border: `1px solid ${active ? accent.border : t.borderInput}`,
@@ -226,7 +227,7 @@ function SearchableSelect({ label, value, onChange, options, accentKey, theme, p
         <span style={{
           flex: 1, padding: '6px 10px', fontSize: 11,
           fontFamily: 'IBM Plex Mono, monospace',
-          color: active ? t.text : t.textMuted,
+          color: active ? t.text : t.text,
           background: t.inputBg, display: 'flex', alignItems: 'center',
           justifyContent: 'space-between', gap: 4, fontWeight: active ? 600 : 400,
           minWidth: 0,
@@ -234,87 +235,103 @@ function SearchableSelect({ label, value, onChange, options, accentKey, theme, p
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {displayValue}
           </span>
-          <ChevronDown size={10} style={{ flexShrink: 0, color: t.textMuted }} />
+          <ChevronDown size={10} style={{ flexShrink: 0, color: t.text }} />
         </span>
       </div>
 
+      {/* Modal Pop-up */}
       {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-          zIndex: 9999, background: t.cardBg,
-          border: `1px solid ${t.borderCard}`, borderRadius: 10,
-          boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          minWidth: 220,
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '7px 10px', borderBottom: `1px solid ${t.border}`,
-            background: t.tableHeadBg,
-          }}>
-            <Search size={11} color={t.textMuted} style={{ flexShrink: 0 }} />
-            <input
-              autoFocus
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Cari nama / ID..."
-              style={{
-                flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                fontSize: 11, fontFamily: 'IBM Plex Mono, monospace',
-                color: t.text, caretColor: accent.text,
-              }}
-            />
-            {query && (
-              <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted, padding: 0, display: 'flex' }}>
-                <X size={10} />
+        <div
+          onClick={() => { setOpen(false); setQuery(''); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 99999,
+            backgroundColor: t.modalOverlay, backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()} // Mencegah tutup jika klik area dalam modal
+            style={{
+              background: t.modalBg, border: `1px solid ${t.modalBorder}`,
+              borderRadius: 12, width: '100%', maxWidth: 480, maxHeight: '80vh',
+              display: 'flex', flexDirection: 'column', boxShadow: '0 24px 48px rgba(0,0,0,0.3)',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Header Modal & Kotak Pencarian */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
+              borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg
+            }}>
+              <Search size={16} color={t.textMuted} style={{ flexShrink: 0 }} />
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Ketik nama atau ID Customer..."
+                style={{
+                  flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                  fontSize: 13, fontFamily: 'IBM Plex Mono, monospace', color: t.tableHeadText,
+                  caretColor: accent.text,
+                }}
+              />
+              {query && (
+                <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted, padding: 0, display: 'flex' }}>
+                  <X size={14} />
+                </button>
+              )}
+              <div style={{ width: 1, height: 16, background: t.border, margin: '0 4px' }} />
+              <button onClick={() => { setOpen(false); setQuery(''); }} style={{ background: t.inputBg, border: `1px solid ${t.borderInput}`, cursor: 'pointer', color: t.text, padding: 4, borderRadius: 6, display: 'flex' }}>
+                <X size={16} />
               </button>
-            )}
-          </div>
-
-          <div style={{ overflowY: 'auto', maxHeight: 200 }}>
-            <div
-              onClick={() => { onChange('', ''); setOpen(false); setQuery(''); }}
-              style={{
-                padding: '7px 12px', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace',
-                color: !active ? t.text : t.textMuted,
-                background: !active ? t.divider : 'transparent',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-              }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = t.tableHover}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = !active ? t.divider : 'transparent'}
-            >
-              <span style={{ fontWeight: !active ? 700 : 400 }}>Semua Customer</span>
             </div>
 
-            {filtered.length === 0 ? (
-              <div style={{ padding: '10px 12px', fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textAlign: 'center' }}>
-                Tidak ditemukan
+            {/* Daftar Item */}
+            <div style={{ overflowY: 'auto', flex: 1, background: t.cardBg, padding: '4px 0' }}>
+              <div
+                onClick={() => { onChange('', ''); setOpen(false); setQuery(''); }}
+                style={{
+                  padding: '10px 16px', fontSize: 12, fontFamily: 'IBM Plex Mono, monospace',
+                  color: !active ? t.text : t.textMuted,
+                  background: !active ? t.divider : 'transparent',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = t.tableHover}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = !active ? t.divider : 'transparent'}
+              >
+                <span style={{ fontWeight: !active ? 700 : 400 }}>Semua Customer</span>
               </div>
-            ) : filtered.map(opt => {
-              const isSelected = opt.no === value;
-              return (
-                <div
-                  key={`${opt.no}||${opt.name}`}
-                  onClick={() => { onChange(opt.no, opt.name); setOpen(false); setQuery(''); }}
-                  style={{
-                    padding: '7px 12px', cursor: 'pointer',
-                    background: isSelected ? accent.bg : 'transparent',
-                    display: 'flex', flexDirection: 'column', gap: 1,
-                  }}
-                  onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = t.tableHover; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isSelected ? accent.bg : 'transparent'; }}
-                >
-                  <span style={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', color: isSelected ? accent.text : t.text, fontWeight: isSelected ? 700 : 400 }}>
-                    {opt.name}
-                  </span>
-                  {opt.no && (
-                    <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', color: isSelected ? accent.text : t.textFaint, opacity: 0.8 }}>
-                      #{opt.no}
-                    </span>
-                  )}
+
+              {filtered.length === 0 ? (
+                <div style={{ padding: '24px', fontSize: 12, color: t.textMuted, fontFamily: 'IBM Plex Mono, monospace', textAlign: 'center' }}>
+                  Data tidak ditemukan
                 </div>
-              );
-            })}
+              ) : filtered.map(opt => {
+                const isSelected = opt.no === value;
+                return (
+                  <div
+                    key={`${opt.no}||${opt.name}`}
+                    onClick={() => { onChange(opt.no, opt.name); setOpen(false); setQuery(''); }}
+                    style={{
+                      padding: '10px 16px', cursor: 'pointer',
+                      background: isSelected ? accent.bg : 'transparent',
+                      display: 'flex', flexDirection: 'column', gap: 2,
+                    }}
+                    onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = t.tableHover; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isSelected ? accent.bg : 'transparent'; }}
+                  >
+                    <span style={{ fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', color: isSelected ? accent.text : t.text, fontWeight: isSelected ? 700 : 400 }}>
+                      {opt.name}
+                    </span>
+                    {opt.no && (
+                      <span style={{ fontSize: 10, fontFamily: 'IBM Plex Mono, monospace', color: isSelected ? accent.text : t.textFaint, opacity: 0.8 }}>
+                        #{opt.no}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -322,7 +339,7 @@ function SearchableSelect({ label, value, onChange, options, accentKey, theme, p
   );
 }
 
-// ─── FilterChip ───────────────────────────────────────────────────────────────
+// FilterChip
 function FilterChip({ label, onRemove, accentKey, theme }: { label: string; onRemove: () => void; accentKey: AccentKey; theme: Theme }) {
   const accent = TK[theme][accentKey];
   return (
@@ -335,7 +352,7 @@ function FilterChip({ label, onRemove, accentKey, theme }: { label: string; onRe
   );
 }
 
-// ─── SearchBox ────────────────────────────────────────────────────────────────
+// SearchBox
 function SearchBox({ value, onChange, theme, placeholder }: {
   value: string; onChange: (v: string) => void; theme: Theme; placeholder?: string;
 }) {
@@ -349,7 +366,7 @@ function SearchBox({ value, onChange, theme, placeholder }: {
       transition: 'border-color 0.2s',
       boxShadow: active ? `0 0 0 2px ${t.blue.border}40` : 'none',
     }}>
-      <Search size={11} color={active ? t.blue.text : t.textMuted} style={{ flexShrink: 0 }} />
+      <Search size={11} color={active ? t.blue.text : t.text} style={{ flexShrink: 0 }} />
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -362,7 +379,7 @@ function SearchBox({ value, onChange, theme, placeholder }: {
         }}
       />
       {active && (
-        <button onClick={() => onChange('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted, padding: 0, display: 'flex' }}>
+        <button onClick={() => onChange('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.text, padding: 0, display: 'flex' }}>
           <X size={10} />
         </button>
       )}
@@ -370,7 +387,7 @@ function SearchBox({ value, onChange, theme, placeholder }: {
   );
 }
 
-// ─── MetricCard ───────────────────────────────────────────────────────────────
+// MetricCard
 function MetricCard({ label, value, sub, cardKey, icon: Icon, theme, compact, trend }: {
   label: string; value: string; sub: string; cardKey: CardKey;
   icon: React.ComponentType<{ size?: number; color?: string }>;
@@ -402,7 +419,7 @@ function MetricCard({ label, value, sub, cardKey, icon: Icon, theme, compact, tr
   );
 }
 
-// ─── YoYSummaryBar ────────────────────────────────────────────────────────────
+// YoYSummaryBar
 function YoYSummaryBar({ dataA, dataB, selectedUnit, yearA, yearB, theme, getUnitValue, fmtValExact }: {
   dataA: OutletSalesData[]; dataB: OutletSalesData[]; selectedUnit: string;
   yearA: number; yearB: number; theme: Theme;
@@ -484,7 +501,7 @@ function ChartTooltip({ active, payload, label, theme, prefix = '', customerMap 
   );
 }
 
-// ─── TableBtn ─────────────────────────────────────────────────────────────────
+// TableBtn
 // Toggle Chart <-> Tabel, dipakai di semua ChartBox (weekly, pie, distribusi, customer).
 function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
   const t = TK[theme];
@@ -499,7 +516,7 @@ function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Them
   );
 }
 
-// ─── DataTable ────────────────────────────────────────────────────────────────
+// DataTable
 // Tabel generic sortable (klik header). Dipakai untuk semua chart di YearPanel —
 // bentuk kolom & baris beda-beda per chart, jadi cukup lempar `columns`+`rows`.
 type TableCol = { key: string; label: string; right?: boolean; format?: (v: any) => string; bold?: boolean };
@@ -634,7 +651,7 @@ function SortTh({ label, sortKey, sortState, onSort, theme, align = 'left' }: { 
   );
 }
 
-// ─── YearPanel ────────────────────────────────────────────────────────────────
+// YearPanel
 function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compact, otherTotal, weekRange, getUnitValue, getWeeklyUnitData, fmtVal, fmtValExact }: {
   year: number; isA: boolean; data: OutletSalesData[]; selectedUnit: string;
   theme: Theme; onExpand: (chartKey: string, year: number) => void;
@@ -772,7 +789,7 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
   const barCity     = useMemo(() => makeBarDist(r => r.city     || 'Unknown', 'city'),     [makeBarDist]);
   const barDistrict = useMemo(() => makeBarDist(r => r.district || 'Unknown', 'district'), [makeBarDist]);
 
-  // ── Kolom tabel per chart (generated dari outletTypes yang tersedia) ──────
+  // Kolom tabel per chart (generated dari outletTypes yang tersedia)
   const weeklyColumns: TableCol[] = useMemo(() => [
     { key: 'week', label: 'Minggu' },
     { key: 'dozNet', label: `${getUnitShortLabel(selectedUnit)} Net`, right: true, bold: true, format: v => fmtValExact(v) },
@@ -1192,7 +1209,7 @@ function YearPanel({ year, isA, data: rows, selectedUnit, theme, onExpand, compa
   );
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// Props
 interface OutletContributionSectionProps {
   data?: { outletData?: OutletSalesData[] };
   theme?: Theme;
@@ -1200,7 +1217,7 @@ interface OutletContributionSectionProps {
   onUnitChange?: (unit: string) => void;
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// Main Component
 export default function OutletContributionSection({ data, theme: themeProp, selectedUnit: selectedUnitProp, onUnitChange: onUnitChangeProp }: OutletContributionSectionProps) {
   const theme: Theme = themeProp ?? 'light';
   const t = TK[theme];

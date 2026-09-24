@@ -13,7 +13,7 @@ import {
   ChevronDown, ChevronUp,
 } from 'lucide-react';
 
-// ─── Theme tokens ─────────────────────────────────────────────────────────────
+// Theme tokens
 type Theme = 'dark' | 'light';
 
 const TK = {
@@ -82,14 +82,14 @@ const TK = {
 const COLOR_PREV = '#3b82f6';
 const COLOR_CURR = '#10b981';
 
-// ─── Formatter: 2 angka di belakang koma, format Indonesia ───────────────────
+// Formatter: 2 angka di belakang koma
 const fmt2 = (n: number) =>
   n.toLocaleString('id-ID', {
     minimumFractionDigits:  2,
     maximumFractionDigits:  2,
   });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 function useBreakpoint() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   useEffect(() => {
@@ -100,7 +100,7 @@ function useBreakpoint() {
   return { isMobile: width < 640 };
 }
 
-// ─── ExpandBtn ────────────────────────────────────────────────────────────────
+// ExpandBtn
 function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   const t = TK[theme];
   return (
@@ -110,8 +110,8 @@ function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
       style={{
         display: 'flex', alignItems: 'center', gap: 4,
         padding: '4px 10px', borderRadius: 6,
-        background: t.inputBg, border: `1px solid ${t.inputBorder}`,
-        color: t.textMuted, cursor: 'pointer',
+        background: t.btnBg, border: `1px solid ${t.btnBorder}`,
+        color: t.text, cursor: 'pointer',
         fontSize: 10, fontWeight: 500,
         fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0,
         transition: 'background 0.15s, color 0.15s',
@@ -122,9 +122,9 @@ function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
         (e.currentTarget as HTMLElement).style.borderColor   = t.btnBorder;
       }}
       onMouseLeave={e => {
-        (e.currentTarget as HTMLElement).style.background    = t.inputBg;
+        (e.currentTarget as HTMLElement).style.background    = t.btnBg;
         (e.currentTarget as HTMLElement).style.color         = t.textMuted;
-        (e.currentTarget as HTMLElement).style.borderColor   = t.inputBorder;
+        (e.currentTarget as HTMLElement).style.borderColor   = t.btnBorder;
       }}
     >
       <Maximize2 size={10} /> Perbesar
@@ -153,9 +153,9 @@ function TableBtn({
         gap: 4,
         padding: '4px 10px',
         borderRadius: 6,
-        background: active ? t.btnBg : t.inputBg,
-        border: `1px solid ${active ? t.btnBorder : t.inputBorder}`,
-        color: active ? t.btnText : t.textMuted,
+        background: active ? t.btnBg : t.btnBg,
+        border: `1px solid ${active ? t.btnBorder : t.btnBorder}`,
+        color: active ? t.btnText : t.text,
         cursor: 'pointer',
         fontSize: 10,
         fontWeight: 600,
@@ -196,7 +196,7 @@ function ChartTooltip({ active, payload, label, labelPrefix, theme }: any) {
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// Modal
 function Modal({ title, onClose, theme, children }: {
   title: string; onClose: () => void; theme: Theme; children: React.ReactNode;
 }) {
@@ -264,7 +264,7 @@ function Modal({ title, onClose, theme, children }: {
   );
 }
 
-// ─── GrowthBadge ─────────────────────────────────────────────────────────────
+// GrowthBadge
 function GrowthBadge({ value, theme, size = 'md' }: { value: number; theme: Theme; size?: 'sm' | 'md' | 'lg' }) {
   const t = TK[theme];
   const isPos  = value > 0;
@@ -289,14 +289,14 @@ function GrowthBadge({ value, theme, size = 'md' }: { value: number; theme: Them
   );
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// Props
 interface YearOnYearGrowthProps {
   data: YearOnYearGrowth;
   comparisonYears?: ComparisonYears;
   theme?: Theme;
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// Main Component
 function YearComparisonTable({
   prevLabel,
   currLabel,
@@ -667,7 +667,7 @@ const [detailOpen, setDetailOpen] = useState(true);
   const isNeg     = data.variancePercentage < 0;
   const deltaColor = isPos ? '#10b981' : '#ef4444';
 
-  // ── Chart data ─────────────────────────────────────────────────────────────
+  // Chart data
   const barData = useMemo(() => [
     { year: String(prevLabel), sales: data.previousYearTotal },
     { year: String(currLabel), sales: data.currentYearTotal  },
@@ -682,7 +682,7 @@ const [detailOpen, setDetailOpen] = useState(true);
   const pctPrev   = totalBoth > 0 ? (data.previousYearTotal / totalBoth) * 100 : 0;
   const pctCurr   = totalBoth > 0 ? (data.currentYearTotal  / totalBoth) * 100 : 0;
 
-  // ── Axis props ─────────────────────────────────────────────────────────────
+  // Axis props
   const axisProps = {
     tick:     { fill: t.axisColor, fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' },
     axisLine: false as const,
@@ -698,7 +698,7 @@ const [detailOpen, setDetailOpen] = useState(true);
     ...extra,
   });
 
-  // ── Chart renderers ────────────────────────────────────────────────────────
+  // Chart renderers
   const barChart = (h: number | string) => (
     <div style={{ height: h, width: '100%' }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -768,11 +768,11 @@ const [detailOpen, setDetailOpen] = useState(true);
     color: t.textSub,
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // Render
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, fontFamily: 'IBM Plex Sans, sans-serif' }}>
 
-      {/* ── KPI Cards ── */}
+      {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
 
         {/* Prev year */}
@@ -1138,7 +1138,7 @@ const [detailOpen, setDetailOpen] = useState(true);
         </div>
       </div>
 
-      {/* ── Detail Table ── */}
+      {/* Detail Table */}
       <div style={card()}>
         <div
           onClick={() => setDetailOpen(p => !p)}
@@ -1252,7 +1252,7 @@ const [detailOpen, setDetailOpen] = useState(true);
         )}
       </div>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       {expanded === 'bar' && (
         <Modal title={`Perbandingan Penjualan — ${String(prevLabel)} vs ${String(currLabel)}`} onClose={() => setExpanded(null)} theme={theme}>
           <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>

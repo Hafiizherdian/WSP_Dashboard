@@ -131,7 +131,7 @@ function FilterSelect({
         value={value}
         onChange={onChange}
         style={{
-          background: t.inputBg, border: 'none', outline: 'none',
+          background: t.pagebg, border: 'none', outline: 'none',
           padding: '6px 10px', fontSize: 12,
           fontFamily: 'IBM Plex Mono, monospace', color: t.text,
           cursor: 'pointer', flex: 1, minWidth: 0,

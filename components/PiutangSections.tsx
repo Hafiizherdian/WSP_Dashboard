@@ -418,7 +418,7 @@ export default function PiutangComponent({ data, weeklyData = [], theme = 'light
             background: t.inputBg, color: t.tableHeadText,
             padding: '2px 9px', borderRadius: 12, border: `1px solid ${t.border}`,
           }}>
-            Outstanding: Rp {fIDR(metrics.totalOutstanding)}
+            Total Piutang: Rp {fIDR(metrics.totalOutstanding)}
           </span>
         </div>
 
@@ -447,7 +447,7 @@ export default function PiutangComponent({ data, weeklyData = [], theme = 'light
                       padding: '10px 14px', fontSize: 9,
                       fontFamily: 'IBM Plex Mono, monospace',
                       textTransform: 'uppercase', letterSpacing: '0.07em',
-                      color: sortBy === col.key ? t.text : t.tableHeadText,
+                      color: sortBy === col.key ? t.tableHeadText : t.tableHeadText,
                       fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer',
                       textAlign: col.numeric ? 'right' : 'left', userSelect: 'none',
                     }}

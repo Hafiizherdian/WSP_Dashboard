@@ -612,7 +612,7 @@ function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, childre
 function ExpandBtn({ onClick, theme, isTable }: { onClick: () => void; theme: Theme; isTable?: boolean }) {
   const t = tk[theme];
   return (
-    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: t.btnBg, border: `1px solid ${t.btnBorder}`, color: t.btnText, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace', flexShrink: 0 }}>
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: t.inputBg, border: `1px solid ${t.text}`, color: t.text, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace', flexShrink: 0 }}>
       <Maximize2 width={12} height={12} />
       {isTable ? 'Perbesar' : 'Perbesar'}
     </button>
@@ -622,7 +622,7 @@ function ExpandBtn({ onClick, theme, isTable }: { onClick: () => void; theme: Th
 function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
   const t = tk[theme];
   return (
-    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: active ? `${t.btnText}22` : t.btnBg, border: `1px solid ${active ? t.btnText : t.btnBorder}`, color: t.btnText, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace', flexShrink: 0, transition: 'all .15s' }}>
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: active ? `${t.btnText}42` : t.inputBg, border: `1px solid ${active ? t.text : t.text}`, color: t.text, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace', flexShrink: 0, transition: 'all .15s' }}>
       {active
         ? <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><polyline points="1,12 5,7 8,9 11,4 15,2" /></svg>
         : <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="1" y="1" width="14" height="14" rx="2" /><line x1="1" y1="5.5" x2="15" y2="5.5" /><line x1="1" y1="10.5" x2="15" y2="10.5" /><line x1="5.5" y1="5.5" x2="5.5" y2="15" /></svg>
@@ -708,9 +708,9 @@ function ChartTableView({
         style={{
           padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
           fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace',
-          background: active ? `${t.btnText}22` : t.btnBg,
-          border: `1px solid ${active ? t.btnText : t.btnBorder}`,
-          color: t.btnText, transition: 'all .15s',
+          background: active ? `${t.btnText}42` : t.inputBg,
+          border: `1px solid ${active ? t.text : t.text}`,
+          color: t.text, transition: 'all .15s',
         }}
       >
         {label}
@@ -1410,9 +1410,9 @@ export default function WeekComparisonComponent({
                   style={{
                     padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
                     fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace',
-                    background: active ? `${t.btnText}22` : t.btnBg,
-                    border: `1px solid ${active ? t.btnText : t.btnBorder}`,
-                    color: t.btnText, transition: 'all .15s',
+                    background: active ? `${t.btnText}42` : t.inputBg,
+                    border: `1px solid ${active ? t.text : t.text}`,
+                    color: t.text, transition: 'all .15s',
                   }}
                 >
                   {v === 'summary' ? 'Ringkasan' : '↔ Per Minggu'}
@@ -1443,9 +1443,9 @@ export default function WeekComparisonComponent({
                   style={{
                     padding: '3px 9px', borderRadius: 6, cursor: 'pointer',
                     fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace',
-                    background: active ? `${t.btnText}22` : 'transparent',
-                    border: `1px solid ${active ? t.btnText : t.inputBorder}`,
-                    color: active ? t.btnText : t.textSub, transition: 'all .15s',
+                    background: active ? `${t.btnText}42` : t.inputBg,
+                    border: `1px solid ${active ? t.text : t.textSub}`,
+                    color: active ? t.text : t.textSub, transition: 'all .15s',
                   }}
                 >
                   {o.label}

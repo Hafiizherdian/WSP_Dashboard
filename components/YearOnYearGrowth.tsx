@@ -104,29 +104,7 @@ function useBreakpoint() {
 function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   const t = TK[theme];
   return (
-    <button
-      onClick={onClick}
-      title="Perbesar chart"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 4,
-        padding: '4px 10px', borderRadius: 6,
-        background: t.btnBg, border: `1px solid ${t.btnBorder}`,
-        color: t.text, cursor: 'pointer',
-        fontSize: 10, fontWeight: 500,
-        fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0,
-        transition: 'background 0.15s, color 0.15s',
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLElement).style.background    = t.btnBg;
-        (e.currentTarget as HTMLElement).style.color         = t.btnText;
-        (e.currentTarget as HTMLElement).style.borderColor   = t.btnBorder;
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLElement).style.background    = t.btnBg;
-        (e.currentTarget as HTMLElement).style.color         = t.textMuted;
-        (e.currentTarget as HTMLElement).style.borderColor   = t.btnBorder;
-      }}
-    >
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: t.inputBg, border: `1px solid ${t.text}`, color: t.text, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0 }}>
       <Maximize2 size={10} /> Perbesar
     </button>
   );
@@ -144,26 +122,7 @@ function TableBtn({
   const t = TK[theme];
 
   return (
-    <button
-      onClick={onClick}
-      title={active ? 'Tampilkan chart' : 'Tampilkan tabel'}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '4px 10px',
-        borderRadius: 6,
-        background: active ? t.btnBg : t.btnBg,
-        border: `1px solid ${active ? t.btnBorder : t.btnBorder}`,
-        color: active ? t.btnText : t.text,
-        cursor: 'pointer',
-        fontSize: 10,
-        fontWeight: 600,
-        fontFamily: 'IBM Plex Mono, monospace',
-        flexShrink: 0,
-        transition: 'background 0.15s, color 0.15s',
-      }}
-    >
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: active ? `${t.btnText}42` : t.inputBg, border: `1px solid ${active ? t.text : t.text}`, color: t.text, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0, transition: 'all 0.15s' }}>
       {active ? 'Chart' : 'Tabel'}
     </button>
   );

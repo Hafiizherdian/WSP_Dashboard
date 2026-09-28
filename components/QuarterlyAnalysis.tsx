@@ -154,7 +154,7 @@ function FilterSelect({ label, accentColor = '#3b82f6', value, onChange, childre
 function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   const t = tk[theme];
   return (
-    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: t.btnBg, border: `1px solid ${t.btnBorder}`, color: t.btnText, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0 }}>
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: t.inputBg, border: `1px solid ${t.text}`, color: t.text, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0 }}>
       <Maximize2 size={12} /> Perbesar
     </button>
   );
@@ -164,7 +164,7 @@ function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
 function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Theme; active?: boolean }) {
   const t = tk[theme];
   return (
-    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: active ? `${t.btnText}22` : t.btnBg, border: `1px solid ${active ? t.btnText : t.btnBorder}`, color: t.btnText, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0, transition: 'all 0.15s' }}>
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: active ? `${t.btnText}42` : t.inputBg, border: `1px solid ${active ? t.text : t.text}`, color: t.text, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0, transition: 'all 0.15s' }}>
       {active
         ? <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><polyline points="1,12 5,7 8,9 11,4 15,2" /></svg>
         : <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="1" y="1" width="14" height="14" rx="2" /><line x1="1" y1="5.5" x2="15" y2="5.5" /><line x1="1" y1="10.5" x2="15" y2="10.5" /><line x1="5.5" y1="5.5" x2="5.5" y2="15" /></svg>
@@ -1149,7 +1149,7 @@ useEffect(() => {
               <span style={{ fontSize: 13, fontWeight: 700, color: t.text, lineHeight: 1.3, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {expandedChart === 'bar' ? (isOmzet ? 'Omzet per Kuartal' : `Target vs Actual · ${getUnitLabel(selectedUnit)}`) : `Distribusi · ${getUnitLabel(selectedUnit)}`}
               </span>
-              <button onClick={() => setExpandedChart(null)} style={{ background: t.inputBg, border: `1px solid ${t.inputBorder}`, cursor: 'pointer', color: t.textMuted, padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600 }}>
+              <button onClick={() => setExpandedChart(null)} style={{ background: t.inputBg, border: `1px solid ${t.text}`, color: t.text, cursor: 'pointer', padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600 }}>
                 <X size={14} /> Tutup
               </button>
             </div>
@@ -1169,7 +1169,7 @@ useEffect(() => {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 12px', borderBottom: `1px solid ${t.border}`, background: t.theadBg, flexShrink: 0, gap: 10 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: t.text, lineHeight: 1.3, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modalTitle}</span>
-              <button onClick={closeModal} style={{ background: t.inputBg, border: `1px solid ${t.inputBorder}`, cursor: 'pointer', color: t.textMuted, padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600 }}>
+              <button onClick={() => setExpandedChart(null)} style={{ background: t.inputBg, border: `1px solid ${t.text}`, color: t.text, cursor: 'pointer', padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600 }}>
                 <X size={14} /> Tutup
               </button>
             </div>

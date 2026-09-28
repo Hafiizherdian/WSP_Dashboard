@@ -130,18 +130,7 @@ function getUnitData(p: any, unitKey: UnitKey): { l4w: number; c1w: number; l4wT
 function ExpandBtn({ onClick, theme }: { onClick: () => void; theme: Theme }) {
   const t = TK[theme];
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 5,
-        padding: '4px 10px', borderRadius: 6,
-        background: t.btnBg, border: `1px solid ${t.btnBorder}`,
-        color: t.btnText, cursor: 'pointer',
-        fontSize: 11, fontWeight: 500,
-        fontFamily: 'IBM Plex Mono, monospace',
-        flexShrink: 0,
-      }}
-    >
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: t.inputBg, border: `1px solid ${t.text}`, color: t.text, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0 }}>
       <Maximize2 size={12} />
       Perbesar
     </button>
@@ -160,38 +149,7 @@ function TableBtn({
   const t = TK[theme];
 
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 5,
-        padding: '4px 10px',
-        borderRadius: 6,
-        background: active
-          ? theme === 'dark'
-            ? 'rgba(59,130,246,0.18)'
-            : 'rgba(37,99,235,0.10)'
-          : t.btnBg,
-        border: `1px solid ${
-          active
-            ? theme === 'dark'
-              ? 'rgba(96,165,250,0.5)'
-              : 'rgba(37,99,235,0.35)'
-            : t.btnBorder
-        }`,
-        color: active
-          ? theme === 'dark'
-            ? '#60a5fa'
-            : '#2563eb'
-          : t.btnText,
-        cursor: 'pointer',
-        fontSize: 11,
-        fontWeight: 600,
-        fontFamily: 'IBM Plex Mono, monospace',
-        flexShrink: 0,
-      }}
-    >
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: active ? `${t.btnText}42` : t.inputBg, border: `1px solid ${active ? t.text : t.text}`, color: t.text, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0, transition: 'all 0.15s' }}>
       {active ? 'Chart' : 'Tabel'}
     </button>
   );

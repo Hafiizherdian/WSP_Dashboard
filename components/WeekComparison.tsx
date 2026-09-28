@@ -633,6 +633,7 @@ function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Them
 }
 
 // ChartTableView
+// ChartTableView
 type ChartRowData = {
   week: string; previousYear: number; currentYear: number;
   variance: number; variancePercentage: number;
@@ -640,34 +641,43 @@ type ChartRowData = {
 
 function ChartTableView({
   type, data, previousYearLabel, currentYearLabel, theme, maxHeight = 340,
-  valueFormatter = fmtExact, // format-aware untuk kolom angka (bukan persentase)
+  valueFormatter = fmtExact,
 }: {
   type: 'line' | 'bar'; data: ChartRowData[];
   previousYearLabel: string | number; currentYearLabel: string | number;
   theme: Theme; maxHeight?: number; valueFormatter?: (v: number) => string;
 }) {
   const t = tk[theme];
+  const [orientation, setOrientation] = useState<'vertical' | 'horizontal'>('vertical');
   const [sort, setSort] = useState<{ key: keyof ChartRowData; dir: 'asc' | 'desc' }>({ key: 'week', dir: 'asc' });
 
   const handleSort = useCallback((key: keyof ChartRowData) => {
     setSort(p => ({ key, dir: p.key === key && p.dir === 'asc' ? 'desc' : 'asc' }));
   }, []);
 
+  const weekNum = (w: string) => parseInt(w.replace('W', ''), 10);
+
   const sorted = useMemo(() => [...data].sort((a, b) => {
     const av = a[sort.key], bv = b[sort.key];
     const cmp = sort.key === 'week'
-      ? parseInt((av as string).replace('W', ''), 10) - parseInt((bv as string).replace('W', ''), 10)
+      ? weekNum(av as string) - weekNum(bv as string)
       : (av as number) - (bv as number);
     return sort.dir === 'asc' ? cmp : -cmp;
   }), [data, sort]);
 
+  // Untuk tampilan horizontal: selalu urut minggu ascending
+  const weekSorted = useMemo(
+    () => [...data].sort((a, b) => weekNum(a.week) - weekNum(b.week)),
+    [data],
+  );
+
   const cols: { key: keyof ChartRowData; label: string; right: boolean }[] = type === 'line'
     ? [
-        { key: 'week',               label: 'Minggu',             right: false },
-        { key: 'previousYear',       label: String(previousYearLabel), right: true },
-        { key: 'currentYear',        label: String(currentYearLabel),  right: true },
-        { key: 'variance',           label: 'Variance',             right: true },
-        { key: 'variancePercentage', label: 'Var %',                right: true },
+        { key: 'week',               label: 'Minggu',                   right: false },
+        { key: 'previousYear',       label: String(previousYearLabel),  right: true },
+        { key: 'currentYear',        label: String(currentYearLabel),   right: true },
+        { key: 'variance',           label: 'Variance',                 right: true },
+        { key: 'variancePercentage', label: 'Var %',                    right: true },
       ]
     : [
         { key: 'week',               label: 'Minggu',  right: false },
@@ -690,57 +700,188 @@ function ChartTableView({
     </span>
   );
 
+  // Toggle orientasi
+  const OrientBtn = ({ value, label }: { value: 'vertical' | 'horizontal'; label: string }) => {
+    const active = orientation === value;
+    return (
+      <button
+        onClick={() => setOrientation(value)}
+        style={{
+          padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+          fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace',
+          background: active ? `${t.btnText}22` : t.btnBg,
+          border: `1px solid ${active ? t.btnText : t.btnBorder}`,
+          color: t.btnText, transition: 'all .15s',
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  // Style helper untuk tabel horizontal
+  const hCell = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+    padding: '8px 14px', fontSize: 12, fontFamily: 'IBM Plex Mono,monospace',
+    borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap', textAlign: 'right',
+    color: t.text, fontWeight: 600, ...extra,
+  });
+  const stickyLeft: React.CSSProperties = { position: 'sticky', left: 0, zIndex: 2, textAlign: 'left' };
+
+  const signed = (v: number, fmt: (n: number) => string) => `${v >= 0 ? '+' : ''}${fmt(v)}`;
+
+  type HRow = {
+    key: string; label: string;
+    cell: (r: ChartRowData) => React.ReactNode;
+    total?: React.ReactNode;
+  };
+
+  const hRows: HRow[] = type === 'line'
+    ? [
+        { key: 'prev', label: String(previousYearLabel), cell: r => valueFormatter(r.previousYear), total: totals && valueFormatter(totals.p) },
+        { key: 'curr', label: String(currentYearLabel),  cell: r => valueFormatter(r.currentYear),  total: totals && valueFormatter(totals.c) },
+        {
+          key: 'var', label: 'Variance',
+          cell: r => <span style={{ color: r.variance >= 0 ? POS_COLOR : NEG_COLOR }}>{signed(r.variance, valueFormatter)}</span>,
+          total: totals && <span style={{ color: totals.v >= 0 ? POS_COLOR : NEG_COLOR }}>{signed(totals.v, valueFormatter)}</span>,
+        },
+        {
+          key: 'pct', label: 'Var %',
+          cell: r => <GrowthPill value={r.variancePercentage} />,
+          total: totals && <GrowthPill value={totals.pct} />,
+        },
+      ]
+    : [
+        {
+          key: 'var', label: 'Selisih',
+          cell: r => <span style={{ color: r.variance >= 0 ? POS_COLOR : NEG_COLOR }}>{signed(r.variance, valueFormatter)}</span>,
+        },
+        { key: 'pct', label: 'Var %', cell: r => <GrowthPill value={r.variancePercentage} /> },
+      ];
+
   return (
-    <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
-      <div style={{ overflowX: 'auto', maxHeight, overflowY: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 340 }}>
-          <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-            <tr>
-              {cols.map(col => (
-                <th key={col.key}
-                  onClick={() => handleSort(col.key)}
-                  style={{ padding: '8px 14px', textAlign: col.right ? 'right' : 'left', fontSize: 9, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, color: t.theadText, background: t.theadBg, borderBottom: `1px solid ${t.border}`, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: col.right ? 'flex-end' : 'flex-start', gap: 2, width: '100%' }}>
-                    {col.label}<SortBtn col={col} />
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((row, i) => {
-              const pos = row.variancePercentage >= 0;
-              return (
-                <tr key={row.week}
-                  style={{ background: i % 2 === 0 ? 'transparent' : t.rowAlt, transition: 'background .12s' }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLTableRowElement).style.background = t.rowHover)}
-                  onMouseLeave={e => ((e.currentTarget as HTMLTableRowElement).style.background = i % 2 === 0 ? 'transparent' : t.rowAlt)}>
-                  <td style={{ padding: '8px 14px', fontSize: 12, color: t.text, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', borderBottom: `1px solid ${t.borderLight}` }}>{row.week}</td>
-                  {type === 'line' && <>
-                    <td style={{ padding: '8px 14px', fontSize: 12, color: t.text, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}` }}>{valueFormatter(row.previousYear)}</td>
-                    <td style={{ padding: '8px 14px', fontSize: 12, color: t.text, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}` }}>{valueFormatter(row.currentYear)}</td>
-                    <td style={{ padding: '8px 14px', fontSize: 12, fontFamily: 'IBM Plex Mono,monospace', fontWeight: 600, textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, color: pos ? POS_COLOR : NEG_COLOR }}>{pos ? '+' : ''}{valueFormatter(row.variance)}</td>
-                  </>}
-                  {type === 'bar' && (
-                    <td style={{ padding: '8px 14px', fontSize: 12, fontFamily: 'IBM Plex Mono,monospace', fontWeight: 600, textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, color: pos ? POS_COLOR : NEG_COLOR }}>{pos ? '+' : ''}{valueFormatter(row.variance)}</td>
+    <div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8, justifyContent: 'flex-end' }}>
+        <OrientBtn value="vertical"   label="↕ Vertikal" />
+        <OrientBtn value="horizontal" label="↔ Horizontal" />
+      </div>
+
+      <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto', maxHeight, overflowY: 'auto' }}>
+          {orientation === 'horizontal' ? (
+            <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{
+                    ...stickyLeft, top: 0, zIndex: 3,
+                    padding: '8px 14px', fontSize: 9, fontFamily: 'IBM Plex Mono,monospace',
+                    textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600,
+                    color: t.theadText, background: t.theadBg,
+                    borderBottom: `1px solid ${t.border}`, borderRight: `1px solid ${t.border}`,
+                  }}>
+                    Metrik
+                  </th>
+                  {weekSorted.map(r => (
+                    <th key={r.week} style={{
+                      position: 'sticky', top: 0, zIndex: 1,
+                      padding: '8px 14px', textAlign: 'right', fontSize: 9,
+                      fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase',
+                      letterSpacing: '.07em', fontWeight: 600, color: t.theadText,
+                      background: t.theadBg, borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap',
+                    }}>
+                      {r.week}
+                    </th>
+                  ))}
+                  {totals && (
+                    <th style={{
+                      position: 'sticky', top: 0, zIndex: 1,
+                      padding: '8px 14px', textAlign: 'right', fontSize: 9,
+                      fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase',
+                      letterSpacing: '.07em', fontWeight: 700, color: t.theadText,
+                      background: t.theadBg, borderBottom: `1px solid ${t.border}`,
+                      borderLeft: `2px solid ${t.border}`, whiteSpace: 'nowrap',
+                    }}>
+                      Total
+                    </th>
                   )}
-                  <td style={{ padding: '8px 14px', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}` }}><GrowthPill value={row.variancePercentage} /></td>
                 </tr>
-              );
-            })}
-          </tbody>
-          {totals && (
-            <tfoot>
-              <tr style={{ background: t.theadBg, borderTop: `2px solid ${t.border}` }}>
-                <td style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, color: t.theadText, fontFamily: 'IBM Plex Mono,monospace' }}>Total</td>
-                <td style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, color: t.theadText, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right' }}>{valueFormatter(totals.p)}</td>
-                <td style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, color: t.theadText, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right' }}>{valueFormatter(totals.c)}</td>
-                <td style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right', color: totals.v >= 0 ? POS_COLOR : NEG_COLOR }}>{totals.v >= 0 ? '+' : ''}{valueFormatter(totals.v)}</td>
-                <td style={{ padding: '8px 14px', textAlign: 'right' }}><GrowthPill value={totals.pct} /></td>
-              </tr>
-            </tfoot>
+              </thead>
+              <tbody>
+                {hRows.map((row, i) => (
+                  <tr
+                    key={row.key}
+                    style={{ background: i % 2 === 0 ? 'transparent' : t.rowAlt }}
+                  >
+                    <td style={{
+                      ...hCell(stickyLeft),
+                      background: t.cardBg,
+                      borderRight: `1px solid ${t.border}`,
+                      fontSize: 11,
+                    }}>
+                      {row.label}
+                    </td>
+                    {weekSorted.map(r => (
+                      <td key={r.week} style={hCell()}>{row.cell(r)}</td>
+                    ))}
+                    {totals && (
+                      <td style={hCell({ fontWeight: 700, color: t.theadText, borderLeft: `2px solid ${t.border}`, background: t.theadBg })}>
+                        {row.total}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 340 }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                <tr>
+                  {cols.map(col => (
+                    <th key={col.key}
+                      onClick={() => handleSort(col.key)}
+                      style={{ padding: '8px 14px', textAlign: col.right ? 'right' : 'left', fontSize: 9, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, color: t.theadText, background: t.theadBg, borderBottom: `1px solid ${t.border}`, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: col.right ? 'flex-end' : 'flex-start', gap: 2, width: '100%' }}>
+                        {col.label}<SortBtn col={col} />
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((row, i) => {
+                  const pos = row.variancePercentage >= 0;
+                  return (
+                    <tr key={row.week}
+                      style={{ background: i % 2 === 0 ? 'transparent' : t.rowAlt, transition: 'background .12s' }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLTableRowElement).style.background = t.rowHover)}
+                      onMouseLeave={e => ((e.currentTarget as HTMLTableRowElement).style.background = i % 2 === 0 ? 'transparent' : t.rowAlt)}>
+                      <td style={{ padding: '8px 14px', fontSize: 12, color: t.text, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', borderBottom: `1px solid ${t.borderLight}` }}>{row.week}</td>
+                      {type === 'line' && <>
+                        <td style={{ padding: '8px 14px', fontSize: 12, color: t.text, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}` }}>{valueFormatter(row.previousYear)}</td>
+                        <td style={{ padding: '8px 14px', fontSize: 12, color: t.text, fontWeight: 600, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}` }}>{valueFormatter(row.currentYear)}</td>
+                        <td style={{ padding: '8px 14px', fontSize: 12, fontFamily: 'IBM Plex Mono,monospace', fontWeight: 600, textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, color: pos ? POS_COLOR : NEG_COLOR }}>{pos ? '+' : ''}{valueFormatter(row.variance)}</td>
+                      </>}
+                      {type === 'bar' && (
+                        <td style={{ padding: '8px 14px', fontSize: 12, fontFamily: 'IBM Plex Mono,monospace', fontWeight: 600, textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, color: pos ? POS_COLOR : NEG_COLOR }}>{pos ? '+' : ''}{valueFormatter(row.variance)}</td>
+                      )}
+                      <td style={{ padding: '8px 14px', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}` }}><GrowthPill value={row.variancePercentage} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {totals && (
+                <tfoot>
+                  <tr style={{ background: t.theadBg, borderTop: `2px solid ${t.border}` }}>
+                    <td style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, color: t.theadText, fontFamily: 'IBM Plex Mono,monospace' }}>Total</td>
+                    <td style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, color: t.theadText, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right' }}>{valueFormatter(totals.p)}</td>
+                    <td style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, color: t.theadText, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right' }}>{valueFormatter(totals.c)}</td>
+                    <td style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right', color: totals.v >= 0 ? POS_COLOR : NEG_COLOR }}>{totals.v >= 0 ? '+' : ''}{valueFormatter(totals.v)}</td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right' }}><GrowthPill value={totals.pct} /></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           )}
-        </table>
+        </div>
       </div>
     </div>
   );

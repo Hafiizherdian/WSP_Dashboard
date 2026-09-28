@@ -275,7 +275,7 @@ function ChartViewport<T extends ChartEntry>({
   data: T[];
   children: (allData: T[], visibleCount: number, startIndex: number) => React.ReactNode;
 }) {
-  const t = tk[theme]; // <-- Menggunakan import tk
+  const t = tk[theme];
   const {
     visibleCount, startIndex, canPanLeft, canPanRight, isWindowed, windowPct,
     zoomIn, zoomOut, resetZoom, panLeft, panRight, panTo, ref, handlers,
@@ -633,7 +633,6 @@ function TableBtn({ onClick, theme, active }: { onClick: () => void; theme: Them
 }
 
 // ChartTableView
-// ChartTableView
 type ChartRowData = {
   week: string; previousYear: number; currentYear: number;
   variance: number; variancePercentage: number;
@@ -936,7 +935,7 @@ export default function WeekComparisonComponent({
   data, comparisonYears, comparisonWeeks, theme: themeProp,
 }: WeekComparisonProps) {
   const theme: Theme = themeProp ?? 'light';
-  const t = tk[theme]; // Menggunakan import tk
+  const t = tk[theme];
   const { isMobile, isTablet } = useBreakpoint();
   const winSize = useWindowSize();
 
@@ -953,9 +952,11 @@ export default function WeekComparisonComponent({
   const [selectedWeek,     setSelectedWeek]     = useState<number | null>(null);
   const [selectedUnit,     setSelectedUnit]     = useState('units_dos');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedProduct,  setSelectedProduct]  = useState('all')
+  const [selectedProduct,  setSelectedProduct]  = useState('all');
   const [expandTarget,     setExpandTarget]     = useState<ExpandTarget>(null);
-  const [tableView,        setTableView]        = useState({line: false, bar: false,});
+  const [tableView,        setTableView]        = useState({ line: false, bar: false });
+  const [detailView,       setDetailView]       = useState<'summary' | 'weekly'>('summary');
+  const [weeklyMetric,     setWeeklyMetric]     = useState<'current' | 'previous' | 'variance' | 'pct'>('current');
   const [sortConfig,       setSortConfig]       = useState<{
     key: 'product' | 'previousYear' | 'currentYear' | 'variance' | 'variancePercentage';
     direction: 'asc' | 'desc';
@@ -1056,6 +1057,60 @@ export default function WeekComparisonComponent({
     });
   }, [productDetails, sortConfig, selectedCategory, selectedProduct]);
 
+  // Matriks produk x minggu (untuk tampilan "Per Minggu")
+  const weeklyWeeks = useMemo(
+    () => (selectedWeek !== null ? [selectedWeek] : weekOptions),
+    [selectedWeek, weekOptions],
+  );
+
+  const weeklyMatrix = useMemo(() => {
+    const m = new Map<string, Map<number, { previous: number; current: number }>>();
+    data.forEach(wd => {
+      if (selectedWeek !== null && wd.week !== selectedWeek) return;
+      wd.details?.forEach(d => {
+        if (selectedCategory !== 'all' && getProductCategory(d.product) !== selectedCategory) return;
+        if (selectedProduct  !== 'all' && d.product !== selectedProduct) return;
+        const { previous, current } = resolveUnitValues(d, selectedUnit);
+        if (!m.has(d.product)) m.set(d.product, new Map());
+        const wm  = m.get(d.product)!;
+        const cur = wm.get(wd.week) ?? { previous: 0, current: 0 };
+        wm.set(wd.week, { previous: cur.previous + previous, current: cur.current + current });
+      });
+    });
+
+    const rows = Array.from(m.entries()).map(([product, wm]) => {
+      let totalPrev = 0, totalCurr = 0;
+      wm.forEach(v => { totalPrev += v.previous; totalCurr += v.current; });
+      return { product, weeks: wm, totalPrev, totalCurr };
+    }).sort((a, b) => b.totalCurr - a.totalCurr);
+
+    // total per minggu (semua produk yang lolos filter)
+    const weekTotals = new Map<number, { previous: number; current: number }>();
+    rows.forEach(r => r.weeks.forEach((v, w) => {
+      const c = weekTotals.get(w) ?? { previous: 0, current: 0 };
+      weekTotals.set(w, { previous: c.previous + v.previous, current: c.current + v.current });
+    }));
+    const grandPrev = rows.reduce((s, r) => s + r.totalPrev, 0);
+    const grandCurr = rows.reduce((s, r) => s + r.totalCurr, 0);
+
+    return { rows, weekTotals, grandPrev, grandCurr };
+  }, [data, selectedWeek, selectedUnit, selectedCategory, selectedProduct]);
+
+  const renderWeeklyValue = useCallback((prev: number, curr: number): React.ReactNode => {
+    const vari = curr - prev;
+    const pct  = prev > 0 ? (vari / prev) * 100 : 0;
+    switch (weeklyMetric) {
+      case 'previous': return fmtValExact(prev);
+      case 'current':  return fmtValExact(curr);
+      case 'variance': return (
+        <span style={{ color: vari >= 0 ? POS_COLOR : NEG_COLOR }}>
+          {vari >= 0 ? '+' : ''}{fmtValExact(vari)}
+        </span>
+      );
+      case 'pct': return <GrowthPill value={pct} />;
+    }
+  }, [weeklyMetric, fmtValExact]);
+
   const chartData = useMemo(() => {
     const rows = selectedWeek !== null
       ? data.filter(d => d.week === selectedWeek)
@@ -1064,11 +1119,11 @@ export default function WeekComparisonComponent({
       let prevVal = 0, currVal = 0;
       if (item.details?.length) {
         item.details.forEach(d => {
-        if (selectedCategory !== 'all' && getProductCategory(d.product) !== selectedCategory) return;
-        if (selectedProduct  !== 'all' && d.product !== selectedProduct) return;
-        const { previous, current } = resolveUnitValues(d, selectedUnit);
-        prevVal += previous; currVal += current;
-      });
+          if (selectedCategory !== 'all' && getProductCategory(d.product) !== selectedCategory) return;
+          if (selectedProduct  !== 'all' && d.product !== selectedProduct) return;
+          const { previous, current } = resolveUnitValues(d, selectedUnit);
+          prevVal += previous; currVal += current;
+        });
       } else {
         prevVal = (item as unknown as { previousYear: number }).previousYear ?? 0;
         currVal = (item as unknown as { currentYear:  number }).currentYear  ?? 0;
@@ -1218,7 +1273,7 @@ export default function WeekComparisonComponent({
     { key: 'variancePercentage', label: 'Var %',                   right: true },
   ], [previousYearLabel, currentYearLabel]);
 
-    const tableCols = useMemo(
+  const tableCols = useMemo(
     () => allCols,
     [allCols],
   );
@@ -1249,7 +1304,7 @@ export default function WeekComparisonComponent({
     { label: `Negatif (${barSummary.neg}wk)`, value: fmtPct(barSummary.avgN), color: NEG_COLOR },
   ], [barSummary]);
 
-    return (
+  return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 12 : 20, fontFamily: 'IBM Plex Sans,sans-serif' }}>
 
       {/* Filter */}
@@ -1259,7 +1314,6 @@ export default function WeekComparisonComponent({
         </span>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, auto)', gap: 8, alignItems: 'center', justifyContent: isMobile ? 'stretch' : 'flex-start' }}>
           
-          {/* MENGGUNAKAN UNIT_OPTIONS DARI TEMA */}
           <FilterSelect label="Unit" accentColor="#10b981" value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} theme={theme} fullWidth={isMobile}>
             {UNIT_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ background: t.selectBg }}>{o.fullLabel}</option>)}
           </FilterSelect>
@@ -1285,7 +1339,7 @@ export default function WeekComparisonComponent({
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 12 : 14 }}>
         {(['line', 'bar'] as const).map(chartType => {
           const isLine  = chartType === 'line';
-          const inTable = tableView [chartType];
+          const inTable = tableView[chartType];
 
           return (
             <div key={chartType} style={card()}>
@@ -1317,7 +1371,7 @@ export default function WeekComparisonComponent({
                       }
                     </div>
                   )}
-                  <TableBtn onClick={() => setTableView(prev => ({...prev,      [chartType]: !prev[chartType],    }))  }  theme={theme} active={inTable}/>
+                  <TableBtn onClick={() => setTableView(prev => ({ ...prev, [chartType]: !prev[chartType] }))} theme={theme} active={inTable} />
                   <ExpandBtn onClick={() => setExpandTarget({ chart: chartType, mode: inTable ? 'table' : 'chart' })} theme={theme} isTable={inTable} />
                 </div>
               </div>
@@ -1344,63 +1398,244 @@ export default function WeekComparisonComponent({
 
       {/* Detail product table */}
       <div style={{ ...card(), padding: isMobile ? 14 : 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 700, color: t.text, fontFamily: 'IBM Plex Sans,sans-serif' }}>Perbandingan Detail</span>
-          <span style={{ fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>
-            {sortedProductDetails.length > 0
-              ? (selectedWeek === null ? `${sortedProductDetails.length} produk` : `${sortedProductDetails.length} · W${selectedWeek}`)
-              : 'Kosong'}
-          </span>
-        </div>
-        <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'] }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? 460 : 560 }}>
-              <thead>
-                <tr>
-                  {tableCols.map(col => (
-                    <th key={col.key}
-                      onClick={() => handleTableSort(col.key as ColKey)}
-                      style={{ padding: isMobile ? '8px 10px' : '10px 16px', textAlign: col.right ? 'right' : 'left', fontSize: isMobile ? 9 : 10, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, color: t.theadText, background: t.theadBg, borderBottom: `1px solid ${t.border}`, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: col.right ? 'flex-end' : 'flex-start', gap: 2, width: '100%' }}>
-                        {col.label}<SortIcon colKey={col.key} sortConfig={sortConfig} theme={theme} />
-                      </span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedProductDetails.length > 0 ? sortedProductDetails.map((detail, i) => {
-                  const pos = detail.variance >= 0;
-                  return (
-                    <tr key={detail.product}
-                      style={{ background: i % 2 === 0 ? 'transparent' : t.rowAlt, transition: 'background .12s' }}
-                      onMouseEnter={e => ((e.currentTarget as HTMLTableRowElement).style.background = t.rowHover)}
-                      onMouseLeave={e => ((e.currentTarget as HTMLTableRowElement).style.background = i % 2 === 0 ? 'transparent' : t.rowAlt)}>
-                      <td style={{ padding: isMobile ? '8px 10px' : '10px 16px', fontSize: isMobile ? 11 : 12, color: t.text, fontWeight: 500, fontFamily: 'IBM Plex Sans,sans-serif', borderBottom: `1px solid ${t.borderLight}`, maxWidth: isMobile ? 110 : 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detail.product}</td>
-                      <td style={{ padding: '10px 16px', fontSize: 12, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap' }}>{fmtValExact(detail.previousYear)}</td>
-                      <td style={{ padding: isMobile ? '8px 10px' : '10px 16px', fontSize: isMobile ? 11 : 12, color: t.text, fontFamily: 'IBM Plex Mono,monospace', fontWeight: 600, textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap' }}>{fmtValExact(detail.currentYear)}</td>
-                      <td style={{ padding: '10px 16px', fontSize: 12, fontFamily: 'IBM Plex Mono,monospace', fontWeight: 600, textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap', color: pos ? POS_COLOR : NEG_COLOR }}>{pos ? '+' : ''}{fmtValExact(detail.variance)}</td>
-                      <td style={{ padding: isMobile ? '8px 10px' : '10px 16px', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap' }}>
-                        <GrowthPill value={detail.variancePercentage} />
-                      </td>
-                    </tr>
-                  );
-                }) : (
-                  <tr>
-                    <td colSpan={tableCols.length} style={{ padding: '24px 16px', textAlign: 'center', fontSize: 12, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>
-                      {selectedWeek !== null ? `Tidak ada data untuk ${getUnitLabel(selectedUnit)} di Week ${selectedWeek}.` : 'Tidak ada data produk.'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {(['summary', 'weekly'] as const).map(v => {
+              const active = detailView === v;
+              return (
+                <button
+                  key={v}
+                  onClick={() => setDetailView(v)}
+                  style={{
+                    padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+                    fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace',
+                    background: active ? `${t.btnText}22` : t.btnBg,
+                    border: `1px solid ${active ? t.btnText : t.btnBorder}`,
+                    color: t.btnText, transition: 'all .15s',
+                  }}
+                >
+                  {v === 'summary' ? 'Ringkasan' : '↔ Per Minggu'}
+                </button>
+              );
+            })}
+            <span style={{ fontSize: 10, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>
+              {sortedProductDetails.length > 0
+                ? (selectedWeek === null ? `${sortedProductDetails.length} produk` : `${sortedProductDetails.length} · W${selectedWeek}`)
+                : 'Kosong'}
+            </span>
           </div>
         </div>
-        
+
+        {detailView === 'weekly' && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            {([
+              { k: 'current',  label: String(currentYearLabel) },
+              { k: 'previous', label: String(previousYearLabel) },
+              { k: 'variance', label: 'Variance' },
+              { k: 'pct',      label: 'Var %' },
+            ] as const).map(o => {
+              const active = weeklyMetric === o.k;
+              return (
+                <button
+                  key={o.k}
+                  onClick={() => setWeeklyMetric(o.k)}
+                  style={{
+                    padding: '3px 9px', borderRadius: 6, cursor: 'pointer',
+                    fontSize: 10, fontWeight: 500, fontFamily: 'IBM Plex Mono,monospace',
+                    background: active ? `${t.btnText}22` : 'transparent',
+                    border: `1px solid ${active ? t.btnText : t.inputBorder}`,
+                    color: active ? t.btnText : t.textSub, transition: 'all .15s',
+                  }}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {detailView === 'summary' ? (
+          <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'] }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? 460 : 560 }}>
+                <thead>
+                  <tr>
+                    {tableCols.map(col => (
+                      <th key={col.key}
+                        onClick={() => handleTableSort(col.key as ColKey)}
+                        style={{ padding: isMobile ? '8px 10px' : '10px 16px', textAlign: col.right ? 'right' : 'left', fontSize: isMobile ? 9 : 10, fontFamily: 'IBM Plex Mono,monospace', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, color: t.theadText, background: t.theadBg, borderBottom: `1px solid ${t.border}`, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: col.right ? 'flex-end' : 'flex-start', gap: 2, width: '100%' }}>
+                          {col.label}<SortIcon colKey={col.key} sortConfig={sortConfig} theme={theme} />
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedProductDetails.length > 0 ? sortedProductDetails.map((detail, i) => {
+                    const pos = detail.variance >= 0;
+                    return (
+                      <tr key={detail.product}
+                        style={{ background: i % 2 === 0 ? 'transparent' : t.rowAlt, transition: 'background .12s' }}
+                        onMouseEnter={e => ((e.currentTarget as HTMLTableRowElement).style.background = t.rowHover)}
+                        onMouseLeave={e => ((e.currentTarget as HTMLTableRowElement).style.background = i % 2 === 0 ? 'transparent' : t.rowAlt)}>
+                        <td style={{ padding: isMobile ? '8px 10px' : '10px 16px', fontSize: isMobile ? 11 : 12, color: t.text, fontWeight: 500, fontFamily: 'IBM Plex Sans,sans-serif', borderBottom: `1px solid ${t.borderLight}`, maxWidth: isMobile ? 110 : 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detail.product}</td>
+                        <td style={{ padding: '10px 16px', fontSize: 12, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap' }}>{fmtValExact(detail.previousYear)}</td>
+                        <td style={{ padding: isMobile ? '8px 10px' : '10px 16px', fontSize: isMobile ? 11 : 12, color: t.text, fontFamily: 'IBM Plex Mono,monospace', fontWeight: 600, textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap' }}>{fmtValExact(detail.currentYear)}</td>
+                        <td style={{ padding: '10px 16px', fontSize: 12, fontFamily: 'IBM Plex Mono,monospace', fontWeight: 600, textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap', color: pos ? POS_COLOR : NEG_COLOR }}>{pos ? '+' : ''}{fmtValExact(detail.variance)}</td>
+                        <td style={{ padding: isMobile ? '8px 10px' : '10px 16px', textAlign: 'right', borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap' }}>
+                          <GrowthPill value={detail.variancePercentage} />
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan={tableCols.length} style={{ padding: '24px 16px', textAlign: 'center', fontSize: 12, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>
+                        {selectedWeek !== null ? `Tidak ada data untuk ${getUnitLabel(selectedUnit)} di Week ${selectedWeek}.` : 'Tidak ada data produk.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div style={{ border: `1px solid ${t.border}`, borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ overflow: 'auto', maxHeight: isMobile ? 360 : 480, WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'] }}>
+              {weeklyMatrix.rows.length > 0 ? (
+                <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{
+                        position: 'sticky', top: 0, left: 0, zIndex: 3,
+                        padding: isMobile ? '8px 10px' : '10px 16px', textAlign: 'left',
+                        fontSize: isMobile ? 9 : 10, fontFamily: 'IBM Plex Mono,monospace',
+                        textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600,
+                        color: t.theadText, background: t.theadBg,
+                        borderBottom: `1px solid ${t.border}`, borderRight: `1px solid ${t.border}`,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        Produk
+                      </th>
+                      {weeklyWeeks.map(w => (
+                        <th key={w} style={{
+                          position: 'sticky', top: 0, zIndex: 1,
+                          padding: isMobile ? '8px 10px' : '10px 16px', textAlign: 'right',
+                          fontSize: isMobile ? 9 : 10, fontFamily: 'IBM Plex Mono,monospace',
+                          textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600,
+                          color: t.theadText, background: t.theadBg,
+                          borderBottom: `1px solid ${t.border}`, whiteSpace: 'nowrap',
+                        }}>
+                          W{w}
+                        </th>
+                      ))}
+                      <th style={{
+                        position: 'sticky', top: 0, zIndex: 1,
+                        padding: isMobile ? '8px 10px' : '10px 16px', textAlign: 'right',
+                        fontSize: isMobile ? 9 : 10, fontFamily: 'IBM Plex Mono,monospace',
+                        textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 700,
+                        color: t.theadText, background: t.theadBg,
+                        borderBottom: `1px solid ${t.border}`, borderLeft: `2px solid ${t.border}`,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weeklyMatrix.rows.map((row, i) => (
+                      <tr key={row.product} style={{ background: i % 2 === 0 ? 'transparent' : t.rowAlt }}>
+                        <td style={{
+                          position: 'sticky', left: 0, zIndex: 2,
+                          padding: isMobile ? '8px 10px' : '10px 16px',
+                          fontSize: isMobile ? 11 : 12, color: t.text, fontWeight: 500,
+                          fontFamily: 'IBM Plex Sans,sans-serif',
+                          background: t.cardBg,
+                          borderBottom: `1px solid ${t.borderLight}`, borderRight: `1px solid ${t.border}`,
+                          whiteSpace: 'nowrap', maxWidth: isMobile ? 130 : 220,
+                          overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>
+                          {row.product}
+                        </td>
+                        {weeklyWeeks.map(w => {
+                          const v = row.weeks.get(w);
+                          return (
+                            <td key={w} style={{
+                              padding: isMobile ? '8px 10px' : '10px 16px', textAlign: 'right',
+                              fontSize: isMobile ? 11 : 12, fontFamily: 'IBM Plex Mono,monospace',
+                              fontWeight: 600, color: v ? t.text : t.textFaint,
+                              borderBottom: `1px solid ${t.borderLight}`, whiteSpace: 'nowrap',
+                            }}>
+                              {v ? renderWeeklyValue(v.previous, v.current) : '–'}
+                            </td>
+                          );
+                        })}
+                        <td style={{
+                          padding: isMobile ? '8px 10px' : '10px 16px', textAlign: 'right',
+                          fontSize: isMobile ? 11 : 12, fontFamily: 'IBM Plex Mono,monospace',
+                          fontWeight: 700, color: t.theadText, background: t.theadBg,
+                          borderBottom: `1px solid ${t.borderLight}`, borderLeft: `2px solid ${t.border}`,
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {renderWeeklyValue(row.totalPrev, row.totalCurr)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td style={{
+                        position: 'sticky', left: 0, bottom: 0, zIndex: 2,
+                        padding: isMobile ? '8px 10px' : '10px 16px',
+                        fontSize: 11, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace',
+                        color: t.theadText, background: t.theadBg,
+                        borderTop: `2px solid ${t.border}`, borderRight: `1px solid ${t.border}`,
+                      }}>
+                        Total
+                      </td>
+                      {weeklyWeeks.map(w => {
+                        const v = weeklyMatrix.weekTotals.get(w);
+                        return (
+                          <td key={w} style={{
+                            position: 'sticky', bottom: 0,
+                            padding: isMobile ? '8px 10px' : '10px 16px', textAlign: 'right',
+                            fontSize: 11, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace',
+                            color: t.theadText, background: t.theadBg,
+                            borderTop: `2px solid ${t.border}`, whiteSpace: 'nowrap',
+                          }}>
+                            {v ? renderWeeklyValue(v.previous, v.current) : '–'}
+                          </td>
+                        );
+                      })}
+                      <td style={{
+                        position: 'sticky', bottom: 0,
+                        padding: isMobile ? '8px 10px' : '10px 16px', textAlign: 'right',
+                        fontSize: 11, fontWeight: 700, fontFamily: 'IBM Plex Mono,monospace',
+                        color: t.theadText, background: t.theadBg,
+                        borderTop: `2px solid ${t.border}`, borderLeft: `2px solid ${t.border}`,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {renderWeeklyValue(weeklyMatrix.grandPrev, weeklyMatrix.grandCurr)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              ) : (
+                <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 12, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>
+                  Tidak ada data produk.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <p style={{ margin: '8px 0 0', fontSize: isMobile ? 10 : 11, color: t.textMuted, fontFamily: 'IBM Plex Mono,monospace' }}>
-          {selectedWeek === null
-            ? `${sortedProductDetails.length} produk · ${getUnitLabel(selectedUnit)} · semua minggu`
-            : `${sortedProductDetails.length} produk · ${getUnitLabel(selectedUnit)} · Week ${selectedWeek}`
+          {detailView === 'weekly'
+            ? `${weeklyMatrix.rows.length} produk · ${getUnitLabel(selectedUnit)} · ${weeklyWeeks.length} minggu`
+            : selectedWeek === null
+              ? `${sortedProductDetails.length} produk · ${getUnitLabel(selectedUnit)} · semua minggu`
+              : `${sortedProductDetails.length} produk · ${getUnitLabel(selectedUnit)} · Week ${selectedWeek}`
           }
         </p>
       </div>

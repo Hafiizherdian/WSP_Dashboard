@@ -1285,7 +1285,7 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
                 <tr>
                   <SortTh sortKey="product"            current={sortState} onSort={k => handleSort(k as SortKey)} theme={theme}>Produk</SortTh>
                   <SortTh sortKey="year"               current={sortState} onSort={k => handleSort(k as SortKey)} hidden={isMobile} theme={theme}>Tahun</SortTh>
-                  <SortTh sortKey="l4wValue"           current={sortState} onSort={k => handleSort(k as SortKey)} right hidden={isMobile} theme={theme}>L4W</SortTh>
+                  <SortTh sortKey="l4wValue"           current={sortState} onSort={k => handleSort(k as SortKey)} right theme={theme}>L4W</SortTh>
                   <SortTh sortKey="c1wValue"           current={sortState} onSort={k => handleSort(k as SortKey)} right theme={theme}>C1W</SortTh>
                   <SortTh sortKey="variance"           current={sortState} onSort={k => handleSort(k as SortKey)} right hidden={isMobile} theme={theme}>Variance</SortTh>
                   <SortTh sortKey="variancePercentage" current={sortState} onSort={k => handleSort(k as SortKey)} right theme={theme}>Var %</SortTh>
@@ -1315,7 +1315,7 @@ export default function L4WC4WAnalysisComponent({ data, theme: themeProp, select
                         )}
                       </td>
                       {!isMobile && <td style={tdBase}>{row.year}</td>}
-                      {!isMobile && <td style={{ ...tdBase, textAlign: 'right' }}>{fmtUnit(row._l4w)}</td>}
+                      <td style={{ ...tdBase, textAlign: 'right' }}>{fmtUnit(row._l4w)}</td>
                       <td style={{ ...tdBase, textAlign: 'right', color: t.text, fontWeight: 700 }}>
                         {fmtUnit(row._c1w)}
                       </td>

@@ -429,14 +429,14 @@ function AchievementSalesmanProductContent({
                         <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: ri === 0 ? 700 : 400, color: ri === 0 ? t.text : t.textSub, whiteSpace: 'nowrap' }}>
                           {ri === 0 ? salesman : ''}
                         </td>
-                        <td style={{ padding: '6px 10px', fontSize: 10, color: t.textSub, whiteSpace: 'nowrap' }}>{r.product || '—'}</td>
-                        <td style={{ padding: '6px 10px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
-                        <td style={{ padding: '6px 10px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
+                        <td style={{ padding: '6px 10px', fontSize: 10, color: t.text, whiteSpace: 'nowrap' }}>{r.product || '—'}</td>
+                        <td style={{ padding: '6px 10px', fontSize: 11, color: t.text, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
+                        <td style={{ padding: '6px 10px', fontSize: 11, color: t.text, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
                         <td style={{ padding: '6px 10px', fontSize: 10, color: '#3b82f6', textAlign: 'right' }}>{fmtN(r.total_av_in)}</td>
                         <td style={{ padding: '6px 10px', fontSize: 10, color: '#10b981', textAlign: 'right' }}>{fmtN(r.total_ec)}</td>
                         <td style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
                         <td style={{ padding: '6px 10px', textAlign: 'right' }}><PBar pct={r.achievement_pct} theme={theme} /></td>
-                        <td style={{ padding: '6px 10px', fontSize: 10, color: t.textSub, textAlign: 'right' }}>
+                        <td style={{ padding: '6px 10px', fontSize: 10, color: t.text, textAlign: 'right' }}>
                           {(r.outlet_count ?? 0) > 0 ? fmtN(r.outlet_count) : '—'}
                         </td>
                       </tr>
@@ -570,19 +570,19 @@ function AchievementContent({
                   
                   {/* Kolom tambahan jika view == product */}
                   {view === 'product' && (
-                    <td style={{ padding: '8px 12px', fontSize: 10, color: t.textSub }}>{r.category || '—'}</td>
+                    <td style={{ padding: '8px 12px', fontSize: 10, color: t.text }}>{r.category || '—'}</td>
                   )}
                   
                   {/* Kolom tambahan jika view == area (Kecamatan) */}
                   {view === 'area' && (
-                    <td style={{ padding: '8px 12px', fontSize: 11, color: t.textSub, whiteSpace: 'nowrap' }}>{r.district || '—'}</td>
+                    <td style={{ padding: '8px 12px', fontSize: 11, color: t.text, whiteSpace: 'nowrap' }}>{r.district || '—'}</td>
                   )}
 
-                  <td style={{ padding: '8px 12px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
+                  <td style={{ padding: '8px 12px', fontSize: 11, color: t.text, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
                   <td style={{ padding: '8px 12px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
                   <td style={{ padding: '8px 12px', textAlign: 'right' }}><PBar pct={r.achievement_pct} theme={theme} /></td>
                   {view !== 'product' && (
-                    <td style={{ padding: '8px 12px', fontSize: 10, color: t.textSub, textAlign: 'right' }}>
+                    <td style={{ padding: '8px 12px', fontSize: 10, color: t.text, textAlign: 'right' }}>
                       {(r.outlet_count ?? 0) > 0 ? fmtN(r.outlet_count!) : '—'}
                     </td>
                   )}
@@ -688,13 +688,13 @@ function TrendContent({ data, theme }: { data: DistData; theme: Theme }) {
                     onMouseEnter={e => (e.currentTarget.style.background = t.rowHover)}
                     onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 1 ? t.rowAlt : 'transparent')}>
                     <td style={{ padding: '7px 12px', fontSize: 11, fontWeight: 700, color: t.text }}>{r.week}</td>
-                    <td style={{ padding: '7px 12px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
-                    <td style={{ padding: '7px 12px', fontSize: 11, color: t.textSub, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
+                    <td style={{ padding: '7px 12px', fontSize: 11, color: t.text, textAlign: 'right' }}>{fmtN(r.total_plan)}</td>
+                    <td style={{ padding: '7px 12px', fontSize: 11, color: t.text, textAlign: 'right' }}>{fmtN(r.total_actual)}</td>
                     <td style={{ padding: '7px 12px', fontSize: 11, color: '#3b82f6', textAlign: 'right' }}>{fmtN(r.total_av_in)}</td>
                     <td style={{ padding: '7px 12px', fontSize: 11, color: '#10b981', textAlign: 'right' }}>{fmtN(r.total_ec)}</td>
                     <td style={{ padding: '7px 12px', fontSize: 11, fontWeight: 700, color: t.text, textAlign: 'right' }}>{fmtN(r.total_av_out)}</td>
                     <td style={{ padding: '7px 12px', textAlign: 'right' }}><AchBadge pct={pct} theme={theme} /></td>
-                    <td style={{ padding: '7px 12px', fontSize: 10, color: t.textSub, textAlign: 'right' }}>{r.outlet_count || '—'}</td>
+                    <td style={{ padding: '7px 12px', fontSize: 10, color: t.text, textAlign: 'right' }}>{r.outlet_count || '—'}</td>
                   </tr>
                 );
               })}

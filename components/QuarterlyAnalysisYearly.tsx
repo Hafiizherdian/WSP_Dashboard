@@ -1187,7 +1187,7 @@ export default function QuarterlyYoYComponent({
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 12px', borderBottom: `1px solid ${t.border}`, background: t.tableHeadBg, flexShrink: 0, gap: 10 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: t.text, lineHeight: 1.3, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modalTitle}</span>
-              <button onClick={() => setExpandedChart(null)} style={{ background: t.inputBg, border: `1px solid ${t.text}`, color: t.text, cursor: 'pointer', padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600 }}>
+              <button onClick={closeModal} style={{ background: t.inputBg, border: `1px solid ${t.text}`, color: t.text, cursor: 'pointer', padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600 }}>
                 <X size={14} /> Tutup
               </button>
             </div>

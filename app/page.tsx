@@ -299,7 +299,7 @@ function DesktopFilterBar({
   return (
     <div style={{flexShrink:0,background:t.filterbg,borderBottom:`1px solid ${t.border}`}}>
       <style>{`@keyframes fbPulseDot{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
-      <div style={{display:'flex',alignItems:'center',padding:'0 14px',height:36,gap:4,overflowX:'auto',scrollbarWidth:'none'}}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: t.inputBg, border: t.text, color: t.text, cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0, transition: 'all 0.15s' }}>
 
         {/* P1 */}
         <Lbl c="P1"/>
@@ -423,7 +423,7 @@ function DesktopFilterBar({
 
           <div style={{position:'relative'}}>
             <button onClick={onApply} disabled={loading}
-              style={{height:22,padding:'0 11px',borderRadius:4,fontSize:10,fontWeight:700,fontFamily:'IBM Plex Mono,monospace',background:'#1c9706',border:'none',color:'#fff',cursor:loading?'not-allowed':'pointer',opacity:loading?0.5:1,flexShrink:0,boxShadow:'0 1px 4px rgba(28,151,6,0.3)'}}>
+              style={{height:22,padding:'0 11px',borderRadius:4,fontSize:11,fontWeight:700,fontFamily:'IBM Plex Mono,monospace',background:'#1c9706',border:'none',color:'#fff',cursor:loading?'not-allowed':'pointer',opacity:loading?0.5:1,flexShrink:0,boxShadow:'0 1px 4px rgba(28,151,6,0.3)'}}>
               {loading ? 'Memuat…' : 'Terapkan'}
             </button>
             {unapplied && !loading && (
